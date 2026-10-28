@@ -33,15 +33,24 @@ ENV/
 env.bak/
 venv.bak/
 
-# Streamlit
+# Environment Variables & Secrets
+.env
+.env.*
+*.env
+*.key
+*.pem
+credentials.json
 .streamlit/secrets.toml
 
-# Data & cache
+# Data & Cache
+data/raw/
+data/processed/
 data/cache/
 *.csv
 *.xlsx
 *.parquet
 !data/sample/
+!data/README.md
 
 # IDE / Editor files
 .vscode/
@@ -52,3 +61,8 @@ data/cache/
 # OS specific
 .DS_Store
 Thumbs.db
+
+# Pytest & Coverage
+.pytest_cache/
+.coverage
+htmlcov/

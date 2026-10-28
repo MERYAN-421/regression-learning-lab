@@ -1,14 +1,14 @@
 import streamlit as st
 
 st.title("📂 Dataset Library")
-st.subheader("Curated Kaggle Regression Datasets (14–39 Features)")
+st.subheader("Curated Kaggle Regression Datasets (Naturally 14–39 Raw Features)")
 
 st.info(
     """
     🚧 **Module Status: Under Development (Scheduled for Milestone 1)**
     
-    This module will provide certified real-world regression datasets from Kaggle with 14 to 39 predictive features,
-    along with dataset profiling, train/test partitioning, and metadata inspection.
+    This module will provide verified real-world regression datasets from Kaggle natively possessing 14 to 39
+    predictive features in their raw form, along with dataset profiling, train/test partitioning, and metadata inspection.
     """
 )
 
@@ -17,48 +17,45 @@ st.divider()
 st.header("🎯 Module Objectives")
 st.markdown(
     """
-    - **Dataset Selection**: Choose from curated tabular datasets designed to exhibit various real-world regression challenges (collinearity, outliers, heteroscedasticity).
-    - **Data Partitioning**: Configure training and testing splits (e.g., 80/20, 70/30) with reproducible random seeds.
-    - **Schema & Metadata Review**: Inspect column data types, target variable definitions, units, and missing value indicators before modeling.
+    - **Native Dimensionality Compliance**: All candidate datasets natively provide 14–39 predictive features without arbitrary column sub-setting.
+    - **Continuous Response Modeling**: Strictly continuous regression targets across engineering, economics, public health, and education.
+    - **Reproducible Data Partitioning**: Configure training and testing splits (e.g., 80/20, 70/30) with reproducible random seeds.
+    - **Metadata & Schema Review**: Inspect column data types, units, and missing value indicators before feeding data into downstream modeling.
     """
 )
 
 st.divider()
 
-st.header("📋 Planned Dataset Catalog Preview")
+st.header("📋 Verified Candidate Dataset Catalog Preview")
 
 sample_catalog = [
     {
-        "Dataset Identifier": "house_prices",
-        "Domain": "Real Estate",
-        "Feature Count": "36 features",
-        "Sample Size": "1,460 rows",
-        "Target Variable": "SalePrice (USD)",
-        "Key Statistical Challenges": "High collinearity, right-skewed target, non-linear features"
+        "Dataset Identifier": "appliances_energy",
+        "Domain": "Energy & Smart Building IoT",
+        "Raw Features": "28 predictive features",
+        "Target Variable": "Appliances (Wh)",
+        "Key Statistical Challenges": "Multi-room sensor collinearity (T1-T9, RH1-RH9), weather variables, autocorrelation"
     },
     {
-        "Dataset Identifier": "concrete_strength",
-        "Domain": "Civil Engineering",
-        "Feature Count": "15 features",
-        "Sample Size": "1,030 rows",
-        "Target Variable": "CompressiveStrength (MPa)",
-        "Key Statistical Challenges": "Complex non-linear interactions, varying feature scales"
+        "Dataset Identifier": "kc_house_sales",
+        "Domain": "Real Estate Valuation",
+        "Raw Features": "20 predictive features",
+        "Target Variable": "price (USD)",
+        "Key Statistical Challenges": "Right-skewed response, area collinearity (sqft_living vs sqft_above), luxury heteroscedasticity"
     },
     {
-        "Dataset Identifier": "auto_mpg_extended",
-        "Domain": "Automotive Engineering",
-        "Feature Count": "18 features",
-        "Sample Size": "3,980 rows",
-        "Target Variable": "FuelConsumption_L100km",
-        "Key Statistical Challenges": "Multi-collinearity, physical power-to-weight constraints"
+        "Dataset Identifier": "life_expectancy",
+        "Domain": "Public Health & Demographics",
+        "Raw Features": "21 predictive features",
+        "Target Variable": "Life expectancy (Years)",
+        "Key Statistical Challenges": "Demographic multicollinearity (infant vs under-five deaths), socio-economic interactions"
     },
     {
-        "Dataset Identifier": "insurance_charges",
-        "Domain": "Healthcare Actuarial",
-        "Feature Count": "14 features",
-        "Sample Size": "2,760 rows",
-        "Target Variable": "MedicalCharges (USD)",
-        "Key Statistical Challenges": "Bimodal residual distribution, categorical interactions"
+        "Dataset Identifier": "student_performance",
+        "Domain": "Educational Data Mining",
+        "Raw Features": "32 predictive features",
+        "Target Variable": "G3 (0-20 grade score)",
+        "Key Statistical Challenges": "Mixed categorical/numeric predictors, zero-inflation boundary effects, ranking dynamics"
     }
 ]
 

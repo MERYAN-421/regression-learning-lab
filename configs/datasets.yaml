@@ -1,61 +1,77 @@
-catalog_version: "1.0.0"
-description: "Catalog specification for Kaggle Regression Datasets (14-39 features)"
+catalog_version: "1.1.0"
+description: "Catalog specification for Kaggle Regression Datasets with naturally 14-39 raw predictive features"
 
-datasets:
-  - id: "house_prices"
-    name: "House Prices: Advanced Regression Techniques"
-    source: "kaggle:c/house-prices-advanced-regression-techniques"
+criteria:
+  min_raw_features: 14
+  max_raw_features: 39
+  target_type: "continuous"
+  note: "Each dataset must natively possess 14-39 available predictive features in its raw form without artificial pre-filtering."
+
+verified_candidates:
+  - id: "appliances_energy"
+    name: "Appliances Energy Prediction"
+    source: "kaggle:loveall/appliances-energy-prediction (UCI ML Repository)"
+    domain: "Energy Consumption & Smart Buildings"
+    target_variable: "Appliances"
+    target_type: "continuous"
+    target_unit: "Watt-hours (Wh)"
+    raw_feature_count: 28
+    usable_feature_range: "26-28 raw predictive features"
+    statistical_challenges:
+      - "High collinearity among multi-room temperature (T1-T9) and humidity (RH1-RH9) sensors"
+      - "Outdoor meteorological exogenous influences (T_out, Pressure, Windspeed)"
+      - "Temporal autocorrelation and periodic diurnal cycles"
+    status: "verified_candidate"
+
+  - id: "kc_house_sales"
+    name: "House Sales in King County, USA"
+    source: "kaggle:harlfoxem/housesalesprediction"
     domain: "Real Estate Valuation"
-    target_variable: "SalePrice"
+    target_variable: "price"
     target_type: "continuous"
     target_unit: "USD"
-    expected_rows: 1460
-    feature_count: 36
+    raw_feature_count: 20
+    usable_feature_range: "18-19 raw predictive features (excluding ID/date)"
     statistical_challenges:
-      - "Severe right-skew in target distribution"
-      - "High multicollinearity among structural features (e.g. GrLivArea, TotalBsmtSF)"
-      - "Heteroscedasticity across higher price tiers"
-    status: "cataloged_for_milestone_1"
+      - "Right-skewed price distribution requiring logarithmic transformation"
+      - "Spatial collinearity (lat, long, zipcode) and structural interactions (sqft_living vs sqft_above/basement)"
+      - "Heteroscedasticity across luxury property segments"
+    status: "verified_candidate"
 
-  - id: "concrete_strength"
-    name: "Concrete Compressive Strength"
-    source: "kaggle:uciml/concrete-data"
-    domain: "Civil Engineering Materials"
-    target_variable: "CompressiveStrength"
+  - id: "life_expectancy"
+    name: "Life Expectancy (WHO Global Health Observatory)"
+    source: "kaggle:kumarajarshi/life-expectancy-who"
+    domain: "Public Health & Demographics"
+    target_variable: "Life expectancy"
     target_type: "continuous"
-    target_unit: "MPa"
-    expected_rows: 1030
-    feature_count: 15
+    target_unit: "Years"
+    raw_feature_count: 21
+    usable_feature_range: "21 raw predictive features"
     statistical_challenges:
-      - "Non-linear ingredient mixture interactions"
-      - "Varying feature scales"
-      - "Moderate non-normality of residuals"
-    status: "cataloged_for_milestone_1"
+      - "Missing data patterns in developing economies across immunization and GDP"
+      - "Multicollinearity between infant deaths and under-five deaths"
+      - "Socio-economic interaction effects (Schooling * Income composition)"
+    status: "verified_candidate"
 
-  - id: "vehicle_fuel_efficiency"
-    name: "Vehicle Characteristics & Fuel Consumption"
-    source: "kaggle:epa/fuel-economy-data"
-    domain: "Automotive Engineering"
-    target_variable: "Comb_L100km"
+  - id: "student_performance"
+    name: "Student Performance (Secondary Education Math)"
+    source: "kaggle:uciml/student-alcohol-consumption (UCI ML Repository)"
+    domain: "Educational Data Mining"
+    target_variable: "G3"
     target_type: "continuous"
-    target_unit: "L/100km"
-    expected_rows: 3980
-    feature_count: 18
+    target_unit: "Grade score (0-20 scale)"
+    raw_feature_count: 32
+    usable_feature_range: "30-32 raw predictive features"
     statistical_challenges:
-      - "High collinearity between Engine Displacement and Cylinders"
-      - "Outliers in exotic and heavy commercial vehicles"
-    status: "cataloged_for_milestone_1"
+      - "Mixed tabular feature types (binary, categorical ordinal, and continuous)"
+      - "Zero-inflation boundary effects in final exam score"
+      - "Strong feature ranking dynamics across social and academic predictors"
+    status: "verified_candidate"
 
-  - id: "medical_cost_personal"
-    name: "Medical Cost Personal Datasets"
-    source: "kaggle:mirichoi0218/insurance"
-    domain: "Healthcare Actuarial"
-    target_variable: "charges"
-    target_type: "continuous"
-    target_unit: "USD"
-    expected_rows: 2760
-    feature_count: 14
-    statistical_challenges:
-      - "Strong categorical interaction (Smoker x BMI)"
-      - "Bimodal distribution of residuals without interaction terms"
-    status: "cataloged_for_milestone_1"
+unverified_or_excluded:
+  - id: "ames_house_prices"
+    reason: "Original raw dataset contains 81 columns (>39 features). Arbitrary feature pre-selection violates raw dimensionality criterion."
+    status: "unverified_excluded"
+  - id: "concrete_compressive_strength"
+    reason: "Original raw dataset contains only 9 columns (8 predictive features < 14). Violates minimum feature threshold."
+    status: "unverified_excluded"
