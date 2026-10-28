@@ -1,21 +1,21 @@
 app:
   name: "Regression Learning Lab"
-  version: "0.1.0"
+  version: "0.2.0"
   edition: "Academic Edition"
   theme: "light"
-  default_test_size: 0.2
+  default_test_size: 0.15
   default_random_seed: 42
 
 milestones:
-  current: "Milestone 0"
-  status: "Project Foundation Initialized"
+  current: "Milestone 1"
+  status: "Dataset Library & Data Engine Completed"
   roadmap:
     - id: "milestone_0"
       name: "Project Foundation & Multi-page Architecture"
       status: "completed"
     - id: "milestone_1"
-      name: "Dataset Library & Preprocessing"
-      status: "scheduled"
+      name: "Dataset Library & Data Engine (14–39 features)"
+      status: "completed"
     - id: "milestone_2"
       name: "Exploratory Data Analysis & Feature Selection"
       status: "scheduled"

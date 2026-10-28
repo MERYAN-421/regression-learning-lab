@@ -100,9 +100,19 @@ Regression Learning Lab (app.py)
 ## 5. Milestone Roadmap
 | Milestone | Phase | Key Deliverables | Status |
 | :--- | :--- | :--- | :--- |
-| **Milestone 0** | **Project Foundation** | Environment setup, project architecture, 9-page skeleton, UI/UX design, documentation, testing, and Git/GitHub setup | ✅ **Current Phase** |
-| **Milestone 1** | **Dataset & Preprocessing** | Kaggle regression dataset pipeline (14–39 features), data validation, caching, and partitioning | ⏳ Next Up |
-| **Milestone 2** | **EDA & Feature Selection** | Univariate/bivariate visualizer, correlation heatmaps, VIF, Filter, Wrapper, and Lasso feature selection | ⏳ Scheduled |
+| **Milestone 0** | **Project Foundation** | Environment setup, project architecture, 9-page skeleton, UI/UX design, documentation, testing, and Git/GitHub setup | ✅ **Completed** |
+| **Milestone 1** | **Dataset & Preprocessing** | Kaggle regression dataset pipeline (14–39 features), data validation, caching, and partitioning (Random, Temporal, Group) | ✅ **Completed** |
+| **Milestone 2** | **EDA & Feature Selection** | Univariate/bivariate visualizer, correlation heatmaps, VIF, Filter, Wrapper, and Lasso feature selection | ⏳ Next Up |
 | **Milestone 3** | **Regression & Evaluation** | statsmodels OLS integration, summary tables, LaTeX equation generator, MSE/RMSE/R² metrics | ⏳ Scheduled |
 | **Milestone 4** | **Assumption Diagnostics** | Five Gauss-Markov diagnostic tests and visual plots, Cook's distance, leverage diagnostics | ⏳ Scheduled |
 | **Milestone 5** | **Comparison & Reporting** | Experiment tracking, side-by-side radar charts, automated laboratory report generator | ⏳ Scheduled |
+
+---
+
+## 6. Data Engine Interface Contract for Future ML Modules
+Milestone 1 establishes the single standard contract consumed by future modeling modules (`src/features/`, `src/models/`, `src/diagnostics/`):
+
+- **`DatasetBundle`**: Contains `feature_df` (raw predictor matrix $X$ with 14–39 features), `target_series` (clean response $y$), `metadata_df` (excluded IDs and dates), and comprehensive profiling metadata.
+- **`SplitResult`**: Contains `X_train`, `X_val`, `X_test`, `y_train`, `y_val`, `y_test`, deterministic row indices, actual partition proportions, and temporal/group boundary metadata.
+- **Leakage Prevention**: All future transformers (StandardScaler, OneHotEncoder, VIF selectors, Lasso) will fit strictly on `X_train` and transform `X_val` / `X_test`.
+

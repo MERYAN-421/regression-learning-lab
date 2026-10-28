@@ -119,17 +119,17 @@ st.header("🚀 System Status & Milestone Roadmap")
 
 st.success(
     """
-    **Current Active Milestone: Milestone 0 — Project Foundation**
+    **Current Active Milestone: Milestone 1 — Dataset Library & Data Engine**
     
-    The modular project foundation, Streamlit navigation system, UI theme, documentation, and page routing
-    are fully initialized. Machine learning algorithms, Kaggle datasets, and statistical diagnostic tests will be implemented in subsequent milestones.
+    The Dataset Library, schema validation, data profiling, and leakage-free Random, Temporal, and Group splitting
+    engines are fully operational. Downstream feature selection and regression modeling will be integrated in subsequent milestones.
     """
 )
 
 roadmap_data = [
     {"Milestone": "Milestone 0", "Scope": "Project Foundation, Multi-page Navigation, UI/UX Architecture", "Status": "✅ Completed"},
-    {"Milestone": "Milestone 1", "Scope": "Dataset Library, Preprocessing, Config Schema (14–39 features)", "Status": "⏳ Scheduled"},
-    {"Milestone": "Milestone 2", "Scope": "Exploratory Data Analysis (EDA) & Feature Selection Suite", "Status": "⏳ Scheduled"},
+    {"Milestone": "Milestone 1", "Scope": "Dataset Library, Preprocessing & Splitting Engine (14–39 features)", "Status": "✅ Completed"},
+    {"Milestone": "Milestone 2", "Scope": "Exploratory Data Analysis (EDA) & Feature Selection Suite", "Status": "⏳ Next Up"},
     {"Milestone": "Milestone 3", "Scope": "Multiple Linear Regression (OLS) & Model Evaluation", "Status": "⏳ Scheduled"},
     {"Milestone": "Milestone 4", "Scope": "Five Regression Assumptions & Statistical Diagnostic Tests", "Status": "⏳ Scheduled"},
     {"Milestone": "Milestone 5", "Scope": "Experiment Comparison, History Tracking & Learning Report", "Status": "⏳ Scheduled"},
@@ -137,4 +137,4 @@ roadmap_data = [
 
 st.table(roadmap_data)
 
-st.caption("Regression Learning Lab | Version 0.1.0 | Academic Edition")
+st.caption("Regression Learning Lab | Version 0.2.0 | Academic Edition")

@@ -1,71 +1,205 @@
-catalog_version: "1.1.0"
-description: "Catalog specification for Kaggle Regression Datasets with naturally 14-39 raw predictive features"
+catalog_version: "2.0.0"
+description: "Single Source of Truth for Regression Learning Lab Datasets (14-39 Usable Predictors)"
 
 criteria:
   min_raw_features: 14
   max_raw_features: 39
+  min_usable_features: 14
+  max_usable_features: 39
   target_type: "continuous"
-  note: "Each dataset must natively possess 14-39 available predictive features in its raw form without artificial pre-filtering."
+  allowed_split_strategies:
+    - "random"
+    - "temporal"
+    - "group"
 
-verified_candidates:
+datasets:
   - id: "appliances_energy"
     name: "Appliances Energy Prediction"
-    source: "kaggle:loveall/appliances-energy-prediction (UCI ML Repository)"
-    domain: "Energy Consumption & Smart Buildings"
+    source: "UCI Machine Learning Repository / Kaggle (loveall/appliances-energy-prediction)"
+    source_provider: "UCI Machine Learning Repository / Kaggle"
+    kaggle_url: "https://www.kaggle.com/datasets/loveall/appliances-energy-prediction"
+    original_reference: "Candanedo, L. M., Feldheim, V., & Deramaix, D. (2017). Energy and Buildings, 140, 81-97."
+    local_path: "data/raw/appliances_energy.csv"
+    csv_separator: ","
+    encoding: "utf-8"
+    target_column: "Appliances"
     target_variable: "Appliances"
     target_type: "continuous"
     target_unit: "Watt-hours (Wh)"
+    target_nature: "Continuous (Energy consumption)"
+    date_column: "date"
+    group_column: null
+    identifier_columns: []
+    metadata_columns:
+      - "date"
+    excluded_predictor_columns:
+      - "date"
+    expected_rows: 19735
+    expected_original_columns: 29
     raw_feature_count: 28
-    usable_feature_range: "26-28 raw predictive features"
-    statistical_challenges:
-      - "High collinearity among multi-room temperature (T1-T9) and humidity (RH1-RH9) sensors"
-      - "Outdoor meteorological exogenous influences (T_out, Pressure, Windspeed)"
-      - "Temporal autocorrelation and periodic diurnal cycles"
+    expected_usable_features: 27
+    recommended_split: "temporal"
+    default_split_ratios: [0.70, 0.15, 0.15]
+    default_random_seed: 42
+    license_notes: "Creative Commons Attribution 4.0 International (CC BY 4.0)"
+    domain: "Energy Consumption & Smart Building IoT"
+    description: "Regression modeling of home appliances energy consumption recorded every 10 minutes over 4.5 months with multi-room sensor readings and local weather conditions."
+    learning_objectives:
+      - "Handle high-dimensional collinear sensor clusters (temperature T1-T9 and humidity RH1-RH9)"
+      - "Understand temporal splitting to prevent forward-looking data leakage"
+      - "Assess lagged relationships between weather dynamics and domestic energy use"
     status: "verified_candidate"
 
   - id: "kc_house_sales"
     name: "House Sales in King County, USA"
-    source: "kaggle:harlfoxem/housesalesprediction"
-    domain: "Real Estate Valuation"
+    source: "Kaggle (harlfoxem/housesalesprediction) / King County GIS"
+    source_provider: "Kaggle (harlfoxem/housesalesprediction) / King County GIS"
+    kaggle_url: "https://www.kaggle.com/datasets/harlfoxem/housesalesprediction"
+    original_reference: "King County Department of Assessments open property data"
+    local_path: "data/raw/kc_house_sales.csv"
+    csv_separator: ","
+    encoding: "utf-8"
+    target_column: "price"
     target_variable: "price"
     target_type: "continuous"
-    target_unit: "USD"
+    target_unit: "USD ($)"
+    target_nature: "Continuous (Market sale price)"
+    date_column: "date"
+    group_column: null
+    identifier_columns:
+      - "id"
+    metadata_columns:
+      - "id"
+      - "date"
+    excluded_predictor_columns:
+      - "id"
+      - "date"
+    expected_rows: 21613
+    expected_original_columns: 21
     raw_feature_count: 20
-    usable_feature_range: "18-19 raw predictive features (excluding ID/date)"
-    statistical_challenges:
-      - "Right-skewed price distribution requiring logarithmic transformation"
-      - "Spatial collinearity (lat, long, zipcode) and structural interactions (sqft_living vs sqft_above/basement)"
-      - "Heteroscedasticity across luxury property segments"
+    expected_usable_features: 18
+    recommended_split: "random"
+    default_split_ratios: [0.70, 0.15, 0.15]
+    default_random_seed: 42
+    license_notes: "Open Database / Public Domain (CC0 equivalent)"
+    domain: "Real Estate Economics"
+    description: "Home sales prices in King County (including Seattle) between May 2014 and May 2015, featuring structural building characteristics and spatial coordinates."
+    learning_objectives:
+      - "Evaluate collinear physical attributes (sqft_living vs sqft_above vs sqft_basement)"
+      - "Explore right-skewness transformations on pricing response"
+      - "Diagnose heteroscedasticity across differing price tiers"
     status: "verified_candidate"
 
   - id: "life_expectancy"
-    name: "Life Expectancy (WHO Global Health Observatory)"
-    source: "kaggle:kumarajarshi/life-expectancy-who"
-    domain: "Public Health & Demographics"
+    name: "Life Expectancy (WHO Global Health)"
+    source: "World Health Organization / Kaggle (kumarajarshi/life-expectancy-who)"
+    source_provider: "World Health Organization / Kaggle (kumarajarshi/life-expectancy-who)"
+    kaggle_url: "https://www.kaggle.com/datasets/kumarajarshi/life-expectancy-who"
+    original_reference: "Global Health Observatory (GHO) data repository, United Nations"
+    local_path: "data/raw/life_expectancy.csv"
+    csv_separator: ","
+    encoding: "utf-8"
+    target_column: "Life expectancy"
     target_variable: "Life expectancy"
     target_type: "continuous"
+    target_column_raw_candidates:
+      - "Life expectancy"
+      - "Life expectancy "
     target_unit: "Years"
+    target_nature: "Continuous (Life expectancy at birth)"
+    date_column: null
+    group_column: "Country"
+    identifier_columns: []
+    metadata_columns:
+      - "Country"
+    excluded_predictor_columns:
+      - "Country"
+    expected_rows: 2938
+    expected_original_columns: 22
     raw_feature_count: 21
-    usable_feature_range: "21 raw predictive features"
-    statistical_challenges:
-      - "Missing data patterns in developing economies across immunization and GDP"
-      - "Multicollinearity between infant deaths and under-five deaths"
-      - "Socio-economic interaction effects (Schooling * Income composition)"
+    expected_usable_features: 20
+    recommended_split: "group"
+    default_split_ratios: [0.70, 0.15, 0.15]
+    default_random_seed: 42
+    license_notes: "World Health Organization Open Data / Public Domain"
+    domain: "Public Health & Socio-Economics"
+    description: "Country-level panel dataset tracking immunization rates, mortality statistics, economic indicators, and schooling across 193 nations between 2000 and 2015."
+    learning_objectives:
+      - "Implement group-aware data splitting by Country to evaluate out-of-nation generalization"
+      - "Analyze multi-variable collinearity between demographic metrics (infant vs under-five deaths)"
+      - "Manage missing data patterns in developing economies without data leakage"
     status: "verified_candidate"
 
   - id: "student_performance"
-    name: "Student Performance (Secondary Education Math)"
-    source: "kaggle:uciml/student-alcohol-consumption (UCI ML Repository)"
+    name: "Student Performance (Mathematics)"
+    source: "UCI Machine Learning Repository / Kaggle (uciml/student-alcohol-consumption)"
+    source_provider: "UCI Machine Learning Repository / Kaggle (uciml/student-alcohol-consumption)"
+    kaggle_url: "https://www.kaggle.com/datasets/uciml/student-alcohol-consumption"
+    original_reference: "Cortez, P., & Silva, A. (2008). Using data mining to predict secondary school student performance."
+    local_path: "data/raw/student_performance.csv"
+    csv_separator: ";"
+    encoding: "utf-8"
+    target_column: "G3"
+    target_variable: "G3"
+    target_type: "continuous"
+    target_unit: "Points (0-20 scale)"
+    target_nature: "Bounded Integer Grade (Used as numerical regression benchmark)"
+    date_column: null
+    group_column: null
+    identifier_columns: []
+    metadata_columns: []
+    excluded_predictor_columns: []
+    expected_rows: 395
+    expected_original_columns: 33
+    raw_feature_count: 32
+    expected_usable_features: 32
+    recommended_split: "random"
+    default_split_ratios: [0.70, 0.15, 0.15]
+    default_random_seed: 42
+    license_notes: "Creative Commons Attribution 4.0 International (CC BY 4.0)"
+    domain: "Educational Data Mining"
+    description: "Secondary education student academic achievements and social habits in Portuguese language and math courses at two secondary schools."
+    learning_objectives:
+      - "Work with mixed tabular data types (17 categorical and 15 numeric attributes)"
+      - "Evaluate semi-continuous target behavior with lower-boundary zero points"
+      - "Assess predictive leverage of intermediate evaluation scores (G1, G2)"
+    status: "verified_candidate"
+
+verified_candidates:
+  - id: "appliances_energy"
+    name: "Appliances Energy Prediction"
+    source: "UCI Machine Learning Repository / Kaggle (loveall/appliances-energy-prediction)"
+    domain: "Energy Consumption & Smart Building IoT"
+    target_variable: "Appliances"
+    target_type: "continuous"
+    raw_feature_count: 28
+    status: "verified_candidate"
+
+  - id: "kc_house_sales"
+    name: "House Sales in King County, USA"
+    source: "Kaggle (harlfoxem/housesalesprediction) / King County GIS"
+    domain: "Real Estate Economics"
+    target_variable: "price"
+    target_type: "continuous"
+    raw_feature_count: 20
+    status: "verified_candidate"
+
+  - id: "life_expectancy"
+    name: "Life Expectancy (WHO Global Health)"
+    source: "World Health Organization / Kaggle (kumarajarshi/life-expectancy-who)"
+    domain: "Public Health & Socio-Economics"
+    target_variable: "Life expectancy"
+    target_type: "continuous"
+    raw_feature_count: 21
+    status: "verified_candidate"
+
+  - id: "student_performance"
+    name: "Student Performance (Mathematics)"
+    source: "UCI Machine Learning Repository / Kaggle (uciml/student-alcohol-consumption)"
     domain: "Educational Data Mining"
     target_variable: "G3"
     target_type: "continuous"
-    target_unit: "Grade score (0-20 scale)"
     raw_feature_count: 32
-    usable_feature_range: "30-32 raw predictive features"
-    statistical_challenges:
-      - "Mixed tabular feature types (binary, categorical ordinal, and continuous)"
-      - "Zero-inflation boundary effects in final exam score"
-      - "Strong feature ranking dynamics across social and academic predictors"
     status: "verified_candidate"
 
 unverified_or_excluded:
