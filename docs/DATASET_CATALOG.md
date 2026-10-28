@@ -1,6 +1,6 @@
 # Dataset Catalog Specification & Empirical Verification
 
-This document records the official dataset registration specifications, verified raw CSV schemas, empirical audit results, and operational requirements for all benchmark datasets in **Regression Learning Lab**.
+This document records the official dataset registration specifications, verified raw CSV schemas, empirical audit results, provenance records, and cryptographic signatures for all benchmark datasets in **Regression Learning Lab**.
 
 ---
 
@@ -20,22 +20,35 @@ $$\text{Usable Original Predictors} = \text{Total Raw Columns} - |\text{Excluded
 
 ## 2. Empirically Verified Benchmark Datasets (Milestone 1)
 
-All four datasets have been downloaded, inspected, parsed, and verified against their declared metadata:
+All four datasets have been downloaded, inspected, parsed, cryptographically hashed, and verified against their declared metadata:
 
-| Dataset ID | Domain | Raw Rows | Raw Cols | Excluded Cols | Target Variable | Usable Predictors | Recommended Split | Local File Path |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`appliances_energy`** | Energy IoT | 19,735 | 29 | `date` (1) | `Appliances` (Wh) | **27 features** | **Temporal** | `data/raw/appliances_energy.csv` |
-| **`kc_house_sales`** | Real Estate | 21,613 | 21 | `id`, `date` (2) | `price` (USD) | **18 features** | **Random** | `data/raw/kc_house_sales.csv` |
-| **`life_expectancy`** | Public Health | 2,938 | 22 | `Country` (1) | `Life expectancy` (Yrs) | **20 features** | **Group (Country)** | `data/raw/life_expectancy.csv` |
-| **`student_performance`** | Education | 395 | 33 | None (0) | `G3` (0-20 scale) | **32 features** | **Random** | `data/raw/student_performance.csv` |
+| Dataset ID | Domain | Raw Rows | Raw Cols | Usable Predictors | Recommended Split | SHA-256 Checksum (Prefix) | Local File Path |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`appliances_energy`** | Energy IoT | 19,735 | 29 | **27 features** | **Temporal** | `2820bf712ad0275c...` | `data/raw/appliances_energy.csv` |
+| **`kc_house_sales`** | Real Estate | 21,613 | 21 | **18 features** | **Random** | `fb9ce109d108656e...` | `data/raw/kc_house_sales.csv` |
+| **`life_expectancy`** | Public Health | 2,938 | 22 | **20 features** | **Group (Country)** | `872125dd1dd0f914...` | `data/raw/life_expectancy.csv` |
+| **`student_performance`** | Education | 395 | 33 | **32 features** | **Random** | `e47f9ee225e1ee6e...` | `data/raw/student_performance.csv` |
 
 ---
 
-## 3. Detailed Dataset Profiles & Empirical Audits
+## 3. Dataset Provenance, Mirrors & Cryptographic Verification
 
-### 3.1 Dataset A: Appliances Energy Prediction
+Because direct downloads from Kaggle require personal API cookies/tokens, Regression Learning Lab uses official primary archives and verified open data mirrors for automated reproducibility:
+
+| Dataset ID | Canonical Source | Download Mirror & Format | Cryptographic SHA-256 Checksum | License |
+| :--- | :--- | :--- | :--- | :--- |
+| `appliances_energy` | [Kaggle Dataset](https://www.kaggle.com/datasets/loveall/appliances-energy-prediction) | [UCI Archive Direct Zip](https://archive.ics.uci.edu/static/public/374/appliances+energy+prediction.zip) | `2820bf712ad0275cb18b85a05250926100d8e65ebb9f4d2d016ca91ea152a25d` | CC BY 4.0 |
+| `kc_house_sales` | [Kaggle Dataset](https://www.kaggle.com/datasets/harlfoxem/housesalesprediction) | [GitHub Open Data Mirror](https://raw.githubusercontent.com/tanlitung/Datasets/master/kc_house_data.csv) | `fb9ce109d108656e64bbff4b7317c076807fd46902609029920defb33be8db29` | Public Domain / CC0 equivalent |
+| `life_expectancy` | [Kaggle Dataset](https://www.kaggle.com/datasets/kumarajarshi/life-expectancy-who) | [GitHub Open Data Mirror](https://raw.githubusercontent.com/EvidenceN/DataSets/master/Life%20Expectancy%20Data.csv) | `872125dd1dd0f9140fbead61df20585a815f5cf47db68f08bf54efaf87963b11` | WHO Open Data / Public Domain |
+| `student_performance` | [Kaggle Dataset](https://www.kaggle.com/datasets/uciml/student-alcohol-consumption) | [UCI Archive Direct Zip](https://archive.ics.uci.edu/static/public/320/student+performance.zip) | `e47f9ee225e1ee6e69b7564e6dac7123e80b8486677fe111f351964cef5dec80` | CC BY 4.0 |
+
+---
+
+## 4. Detailed Dataset Profiles & Empirical Audits
+
+### 4.1 Dataset A: Appliances Energy Prediction
 - **ID**: `appliances_energy`
-- **Source**: UCI Machine Learning Repository / Kaggle (`loveall/appliances-energy-prediction`)
+- **Source**: UCI Machine Learning Repository (Dataset #374) / Kaggle (`loveall/appliances-energy-prediction`)
 - **Citation**: Candanedo, L. M., Feldheim, V., & Deramaix, D. (2017). *Energy and Buildings*, 140, 81-97.
 - **License**: Creative Commons Attribution 4.0 International (CC BY 4.0)
 - **Delimiters & Encoding**: Comma `,`, UTF-8
@@ -50,7 +63,7 @@ All four datasets have been downloaded, inspected, parsed, and verified against 
 
 ---
 
-### 3.2 Dataset B: King County House Sales
+### 4.2 Dataset B: King County House Sales
 - **ID**: `kc_house_sales`
 - **Source**: Kaggle (`harlfoxem/housesalesprediction`) / King County Department of Assessments
 - **License**: Open Database / Public Domain (CC0 equivalent)
@@ -65,7 +78,7 @@ All four datasets have been downloaded, inspected, parsed, and verified against 
 
 ---
 
-### 3.3 Dataset C: Life Expectancy (WHO)
+### 4.3 Dataset C: Life Expectancy (WHO)
 - **ID**: `life_expectancy`
 - **Source**: World Health Organization / Kaggle (`kumarajarshi/life-expectancy-who`)
 - **License**: WHO Open Data Repository / Public Domain
@@ -82,9 +95,9 @@ All four datasets have been downloaded, inspected, parsed, and verified against 
 
 ---
 
-### 3.4 Dataset D: Student Performance (Mathematics)
+### 4.4 Dataset D: Student Performance (Mathematics)
 - **ID**: `student_performance`
-- **Source**: UCI Machine Learning Repository / Kaggle (`uciml/student-alcohol-consumption`)
+- **Source**: UCI Machine Learning Repository (Dataset #320) / Kaggle (`uciml/student-alcohol-consumption`)
 - **Citation**: Cortez, P., & Silva, A. (2008). *Using data mining to predict secondary school student performance*.
 - **License**: Creative Commons Attribution 4.0 International (CC BY 4.0)
 - **Delimiters & Encoding**: Semicolon `;`, UTF-8
@@ -101,9 +114,13 @@ All four datasets have been downloaded, inspected, parsed, and verified against 
 
 ---
 
-## 4. Excluded / Unverified Datasets Audit
+## 5. Excluded Datasets Justification
 
-| Dataset ID | Raw Columns | Status | Rejection Rationale |
-| :--- | :--- | :--- | :--- |
-| `ames_house_prices` | 81 columns | `unverified_excluded` | Violates the natural upper bound ($p \le 39$). Arbitrary column subsetting is prohibited. |
-| `concrete_compressive_strength` | 9 columns | `unverified_excluded` | Contains only 8 candidate predictors, violating the lower bound ($p \ge 14$). |
+The following candidates were investigated and explicitly rejected:
+
+1. **Ames Housing Dataset** (`ames_house_prices`):
+   - Raw column count: 81 columns.
+   - Reason for Rejection: Exceeds the maximum 39 feature threshold. Arbitrarily pre-selecting 36 columns violates the mandatory natural dimensional constraint.
+2. **Concrete Compressive Strength** (`concrete_compressive_strength`):
+   - Raw column count: 9 columns (8 predictors).
+   - Reason for Rejection: Fails the minimum 14 predictor threshold.

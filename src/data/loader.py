@@ -1,6 +1,7 @@
 """
 Dataset loader module: reads registered tabular datasets from local storage.
 """
+import hashlib
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import pandas as pd
@@ -22,6 +23,27 @@ def resolve_dataset_path(metadata: DatasetMetadata) -> Path:
     """Resolve the absolute filesystem path for a dataset."""
     root = get_project_root()
     return root / metadata.local_path
+
+
+def compute_file_fingerprint(file_path: Path) -> str:
+    """
+    Compute a deterministic file fingerprint based on file size and SHA-256 hash.
+    Ensures that replacing a CSV file or updating its contents invalidates caches.
+    """
+    if not file_path.exists() or not file_path.is_file():
+        return "missing"
+    file_size = file_path.stat().st_size
+    hasher = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            hasher.update(chunk)
+    return f"{file_size}_{hasher.hexdigest()[:16]}"
+
+
+def get_dataset_fingerprint(metadata: DatasetMetadata) -> str:
+    """Get the file fingerprint for a registered dataset."""
+    path = resolve_dataset_path(metadata)
+    return compute_file_fingerprint(path)
 
 
 def check_dataset_availability(metadata: DatasetMetadata) -> bool:

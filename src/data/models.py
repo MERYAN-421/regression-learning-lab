@@ -42,6 +42,9 @@ class DatasetMetadata:
     domain: str = ""
     description: str = ""
     learning_objectives: List[str] = field(default_factory=list)
+    sha256_checksum: str = ""
+    download_mirror_url: str = ""
+    provenance_notes: str = ""
     status: str = "available"
 
 

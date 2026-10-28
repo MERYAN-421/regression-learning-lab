@@ -13,6 +13,7 @@ from src.data import (
     split_dataset,
     check_dataset_availability,
     download_dataset,
+    get_dataset_fingerprint,
     create_target_histogram,
     create_missing_values_bar,
     create_feature_breakdown_chart,
@@ -52,10 +53,6 @@ dataset_options = {meta.id: f"{meta.name} ({meta.domain})" for meta in all_metad
 if "selected_dataset_id" not in st.session_state:
     st.session_state["selected_dataset_id"] = all_metadata[0].id
 
-# Ensure cache container
-if "dataset_bundles" not in st.session_state:
-    st.session_state["dataset_bundles"] = {}
-
 # ---------------------------------------------------------
 # SECTION A: Dataset Selection & Metadata
 # ---------------------------------------------------------
@@ -78,6 +75,10 @@ with col_sel:
         # Clear stale split and future downstream models
         if "active_split_result" in st.session_state:
             del st.session_state["active_split_result"]
+        if "active_split_config" in st.session_state:
+            del st.session_state["active_split_config"]
+        if "active_split_dataset_id" in st.session_state:
+            del st.session_state["active_split_dataset_id"]
         if "trained_model" in st.session_state:
             del st.session_state["trained_model"]
         st.rerun()
@@ -86,6 +87,7 @@ current_meta: DatasetMetadata = registry.get_dataset(st.session_state["selected_
 
 # Check availability on disk
 is_available = check_dataset_availability(current_meta)
+current_fingerprint = get_dataset_fingerprint(current_meta) if is_available else "missing"
 
 with col_info:
     with st.container(border=True):
@@ -115,10 +117,14 @@ if not is_available:
     st.stop()
 
 # ---------------------------------------------------------
-# Load and Cache Active Dataset Bundle
+# Load and Cache Active Dataset Bundle with File Fingerprint
 # ---------------------------------------------------------
 @st.cache_data(show_spinner=False)
-def _load_cached_bundle(ds_id: str):
+def _load_cached_bundle(ds_id: str, file_fingerprint: str):
+    """
+    Cached bundle loader keyed on dataset ID AND file fingerprint.
+    Replacing, updating, or downloading a newer CSV invalidates this cache automatically.
+    """
     meta = registry.get_dataset(ds_id)
     raw_df, feat_df, target_series, meta_df = load_dataset_bundle(meta)
     val_report = validate_dataset_schema(raw_df, meta)
@@ -133,17 +139,18 @@ def _load_cached_bundle(ds_id: str):
     ), val_report
 
 with st.spinner("Loading and profiling dataset..."):
-    bundle, validation_report = _load_cached_bundle(current_meta.id)
+    bundle, validation_report = _load_cached_bundle(current_meta.id, current_fingerprint)
     st.session_state["active_dataset_bundle"] = bundle
 
-# Check schema validation warnings / discrepancies
+# Check schema validation: Distinguish blocking errors from warnings
+if validation_report.has_blocking_errors:
+    for err in validation_report.blocking_errors:
+        st.error(f"❌ **Blocking Schema Error**: {err}")
+    st.error("🚫 **Splitting Disabled**: Resolve the critical schema errors above to allow partitioning.")
+
 if validation_report.warnings:
     for w in validation_report.warnings:
         st.warning(f"ℹ️ {w}")
-
-if not validation_report.is_valid:
-    for d in validation_report.discrepancies:
-        st.error(f"❌ Schema Discrepancy: {d}")
 
 st.divider()
 
@@ -289,6 +296,19 @@ st.header("5. Train / Validation / Test Splitting Configuration")
 
 recommended_strat = SplitStrategy(current_meta.recommended_split)
 
+# Evaluate strategy compatibility with dataset structure
+has_date_col = bool(current_meta.date_column and current_meta.date_column in bundle.raw_df.columns)
+has_group_col = bool(current_meta.group_column and current_meta.group_column in bundle.raw_df.columns)
+
+compatible_strategies = [SplitStrategy.RANDOM]
+if has_date_col:
+    compatible_strategies.append(SplitStrategy.TEMPORAL)
+if has_group_col:
+    compatible_strategies.append(SplitStrategy.GROUP)
+
+default_strat = recommended_strat if recommended_strat in compatible_strategies else SplitStrategy.RANDOM
+default_strat_idx = compatible_strategies.index(default_strat)
+
 st.markdown(
     f"**Recommended Splitting Strategy for this Dataset**: `{recommended_strat.value.upper()}`\n\n"
 )
@@ -302,8 +322,8 @@ if recommended_strat == SplitStrategy.TEMPORAL:
 elif recommended_strat == SplitStrategy.GROUP:
     st.info(
         f"🌍 **Group Splitting Rationale**: '{current_meta.name}' is a panel dataset with repeated observations "
-        f"over time grouped by `{current_meta.group_column}`. Group-disjoint splitting ensures that each country "
-        "belongs strictly to one partition, testing model generalization to previously unseen countries."
+        f"over time grouped by `{current_meta.group_column}`. Group-disjoint splitting ensures that each group "
+        "belongs strictly to one partition, testing model generalization to previously unseen entities."
     )
 else:
     st.info(
@@ -316,21 +336,45 @@ col_strat, col_ratios, col_seed = st.columns([1, 2, 1])
 with col_strat:
     selected_strategy_str = st.selectbox(
         "Split Strategy:",
-        options=[s.value for s in SplitStrategy],
-        index=[s.value for s in SplitStrategy].index(recommended_strat.value),
-        format_func=lambda x: f"{x.capitalize()} Split"
+        options=[s.value for s in compatible_strategies],
+        index=default_strat_idx,
+        format_func=lambda x: f"{x.capitalize()} Split",
+        key="split_strategy_selector"
     )
     chosen_strategy = SplitStrategy(selected_strategy_str)
+
+    # Incompatible strategies note
+    incompatible = [s for s in SplitStrategy if s not in compatible_strategies]
+    if incompatible:
+        reasons = [
+            f"**{s.value.capitalize()}** (no {'date' if s == SplitStrategy.TEMPORAL else 'group'} column)"
+            for s in incompatible
+        ]
+        st.caption(f"🔒 Incompatible options disabled: {', '.join(reasons)}")
+
+    # Educational Data Leakage Warnings if deviating from recommended strategy
+    if recommended_strat == SplitStrategy.TEMPORAL and chosen_strategy == SplitStrategy.RANDOM:
+        st.warning(
+            "⚠️ **Lookahead Leakage Risk**: Appliances Energy Prediction contains strong autocorrelation over time. "
+            "Random Split will shuffle future and past timestamps together, creating artificial lookahead leakage! "
+            "Temporal Split is strongly advised."
+        )
+    elif recommended_strat == SplitStrategy.GROUP and chosen_strategy == SplitStrategy.RANDOM:
+        st.warning(
+            "⚠️ **Entity Contamination Risk**: Life Expectancy contains repeated observations by Country. "
+            "Random Split will place observations from the same country into both training and testing sets. "
+            "Group Split is strongly advised."
+        )
 
 with col_ratios:
     st.markdown("**Partition Proportions (Must sum to 100%)**:")
     r_col1, r_col2, r_col3 = st.columns(3)
     with r_col1:
-        train_pct = st.number_input("Train %", min_value=50, max_value=85, value=70, step=5)
+        train_pct = st.number_input("Train %", min_value=50, max_value=85, value=70, step=5, key="split_train_pct")
     with r_col2:
-        val_pct = st.number_input("Validation %", min_value=5, max_value=30, value=15, step=5)
+        val_pct = st.number_input("Validation %", min_value=5, max_value=30, value=15, step=5, key="split_val_pct")
     with r_col3:
-        test_pct = st.number_input("Test %", min_value=5, max_value=30, value=15, step=5)
+        test_pct = st.number_input("Test %", min_value=5, max_value=30, value=15, step=5, key="split_test_pct")
 
     sum_pct = train_pct + val_pct + test_pct
     if sum_pct != 100:
@@ -338,15 +382,31 @@ with col_ratios:
 
 with col_seed:
     if chosen_strategy != SplitStrategy.TEMPORAL:
-        random_seed = st.number_input("Random Seed:", value=current_meta.default_random_seed, step=1)
+        random_seed = st.number_input(
+            "Random Seed:",
+            value=current_meta.default_random_seed,
+            step=1,
+            key="split_random_seed"
+        )
     else:
         st.write("Date Column:")
         st.code(current_meta.date_column)
         random_seed = 42
 
-execute_split = st.button("🚀 Execute Train / Validation / Test Split", type="primary", disabled=(sum_pct != 100))
+# Check if execution can proceed
+can_execute_split = (sum_pct == 100) and (not validation_report.has_blocking_errors)
 
-if execute_split:
+if validation_report.has_blocking_errors:
+    st.error("🚫 **Cannot Partition**: Splitting is disabled until all critical schema errors above are resolved.")
+
+execute_split = st.button(
+    "🚀 Execute Train / Validation / Test Split",
+    type="primary",
+    disabled=not can_execute_split,
+    key="execute_split_button"
+)
+
+if execute_split and can_execute_split:
     split_config = SplitConfig(
         strategy=chosen_strategy,
         train_ratio=train_pct / 100.0,
@@ -367,6 +427,7 @@ if execute_split:
             )
             st.session_state["active_split_config"] = split_config
             st.session_state["active_split_result"] = split_res
+            st.session_state["active_split_dataset_id"] = current_meta.id
             st.success(f"✅ Successfully partitioned dataset using {chosen_strategy.value.capitalize()} Split!")
     except Exception as e:
         st.error(f"Splitting error: {e}")
@@ -374,11 +435,50 @@ if execute_split:
 # ---------------------------------------------------------
 # SECTION F: Split Result Summary & Inspection
 # ---------------------------------------------------------
-if "active_split_result" in st.session_state and st.session_state.get("selected_dataset_id") == current_meta.id:
+has_active_split = (
+    "active_split_result" in st.session_state
+    and st.session_state.get("active_split_dataset_id") == current_meta.id
+)
+
+if has_active_split:
     st.divider()
     st.header("6. Partition Summary & Leakage Prevention Audit")
 
     res: SplitResult = st.session_state["active_split_result"]
+    active_cfg: SplitConfig = st.session_state.get("active_split_config")
+
+    # Detect if UI settings differ from active partition config
+    is_outdated = False
+    if active_cfg is not None:
+        is_outdated = (
+            active_cfg.strategy != chosen_strategy
+            or abs(active_cfg.train_ratio - train_pct / 100.0) > 1e-4
+            or abs(active_cfg.val_ratio - val_pct / 100.0) > 1e-4
+            or abs(active_cfg.test_ratio - test_pct / 100.0) > 1e-4
+            or (chosen_strategy != SplitStrategy.TEMPORAL and active_cfg.random_seed != int(random_seed))
+        )
+
+    # Active Configuration & Status Card
+    with st.container(border=True):
+        c_head1, c_head2 = st.columns([3, 1])
+        with c_head1:
+            st.markdown(
+                f"**Active Partition Config**: `{active_cfg.strategy.value.capitalize()} Split` | "
+                f"`{int(active_cfg.train_ratio*100)}% Train / {int(active_cfg.val_ratio*100)}% Val / {int(active_cfg.test_ratio*100)}% Test`"
+                + (f" | Seed: `{active_cfg.random_seed}`" if active_cfg.strategy != SplitStrategy.TEMPORAL else "")
+            )
+        with c_head2:
+            if is_outdated:
+                st.error("⚠️ State: Outdated")
+            else:
+                st.success("✅ State: Synchronized")
+
+        if is_outdated:
+            st.warning(
+                "⚠️ **Configuration Changed**: The inputs in Section 5 have changed since this partition was generated. "
+                "The statistics and data below reflect the active partition. "
+                "Click **'Execute Train / Validation / Test Split'** to apply new parameters."
+            )
 
     sc1, sc2, sc3, sc4 = st.columns(4)
     sc1.metric("Train Partition", f"{res.sample_counts['train']:,} rows", f"{res.actual_proportions['train']:.1%}")

@@ -78,6 +78,9 @@ class DatasetRegistry:
                 domain=d.get("domain", ""),
                 description=d.get("description", ""),
                 learning_objectives=d.get("learning_objectives", []),
+                sha256_checksum=d.get("sha256_checksum", ""),
+                download_mirror_url=d.get("download_mirror_url", ""),
+                provenance_notes=d.get("provenance_notes", ""),
                 status=d.get("status", "available")
             )
             metadata_dict[ds_id] = metadata

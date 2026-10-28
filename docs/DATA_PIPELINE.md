@@ -1,6 +1,6 @@
 # Data Engine & Splitting Pipeline Specification
 
-This document details the architectural design, data structures, and operational contracts of the **Data Engine** implemented in **Milestone 1** of the Regression Learning Lab.
+This document details the architectural design, data structures, operational contracts, and quality enforcement policies of the **Data Engine** in **Regression Learning Lab**.
 
 ---
 
@@ -31,8 +31,11 @@ flowchart TD
         K --> L
     end
     
-    L --> M[Streamlit Session State\nst.session_state['active_split_result']]
-    M --> N[Downstream ML Modules\nMilestone 2: Feature Selection\nMilestone 3: OLS Regression]
+    subgraph State & Invalidation
+        L --> M[Streamlit Session State\nst.session_state['active_split_result']]
+        M --> N[Configuration State Tracking\nDetects Outdated Settings]
+        N --> O[Downstream ML Modules\nMilestone 2: Feature Selection\nMilestone 3: OLS Regression]
+    end
 ```
 
 ---
@@ -43,11 +46,11 @@ flowchart TD
 | :--- | :--- | :--- |
 | `src/data/models.py` | Typed dataclasses defining domain contracts | `DatasetMetadata`, `DatasetProfile`, `SplitConfig`, `SplitResult`, `DatasetBundle` |
 | `src/data/registry.py` | Loads and validates declarative YAML configuration | `DatasetRegistry`, `RegistryValidationError` |
-| `src/data/loader.py` | Resolves paths, parses CSVs (encodings/delimiters), sanitizes header whitespace | `load_raw_dataset()`, `split_features_and_target()` |
-| `src/data/validation.py` | Enforces 14–39 feature rule, checks target validity and required strategy columns | `validate_dataset_schema()`, `ValidationReport` |
+| `src/data/loader.py` | Resolves paths, parses CSVs, sanitizes headers, computes file fingerprints | `load_raw_dataset()`, `compute_file_fingerprint()` |
+| `src/data/validation.py` | Distinguishes blocking errors from warnings, enforces 14–39 feature rule | `validate_dataset_schema()`, `ValidationReport` |
 | `src/data/profiling.py` | Computes descriptive statistics and builds interactive Plotly charts | `compute_dataset_profile()`, `create_target_histogram()` |
 | `src/data/splitters.py` | Executes deterministic Random, Temporal, and Group splitting | `split_dataset()`, `SplitResult` |
-| `src/data/download.py` | Automated, reproducible dataset downloader from authoritative sources | `download_dataset()`, `download_all()` |
+| `src/data/download.py` | Automated downloader with cryptographic SHA-256 verification | `download_dataset()`, `verify_dataset_integrity()` |
 
 ---
 
@@ -86,23 +89,63 @@ $$\text{Usable Feature Count} = \text{Total Raw Columns} - |\text{Excluded Colum
 
 ---
 
-## 5. Strict Data Leakage Prevention Guarantees
+## 5. Strict Schema Validation & Blocking Policy
 
-1. **No Global Preprocessing**:
-   - Feature scaling (`StandardScaler`, `MinMaxScaler`), categorical encoding (`OneHotEncoder`), missing value imputation, and feature selection are **intentionally not fitted** across the combined dataset in Milestone 1.
-   - In subsequent milestones, all transformers will be fitted strictly on `X_train` and only applied (`transform()`) to `X_val` and `X_test`.
-2. **Target Missingness Exclusion**:
-   - Rows with missing target values (e.g., 10 missing rows in WHO Life Expectancy) are removed **before partitioning**, and the exclusion count is logged as an explicit warning.
-3. **Predictor Missingness Retention**:
-   - Rows with missing predictor values are **preserved** in the partitions so that students can evaluate training-set imputation strategies in Milestone 2.
+The system explicitly distinguishes **Critical Blocking Errors** from **Non-blocking Data Quality Warnings**:
+
+### Critical Blocking Errors (Splitting Forbidden)
+If any of these conditions occur, splitting is blocked at both the backend (`split_dataset()`) and frontend (Streamlit disabled button):
+1. **Feature Count Violation**: Usable original features $< 14$ or $> 39$.
+2. **Missing Target Column**: Declared target variable absent in dataset.
+3. **Duplicate Column Headers**: Ambiguous duplicate column names.
+4. **Missing Required Strategy Key**: Attempting temporal split without a date column or group split without a group column.
+5. **Empty Dataset**: $0$ observations.
+
+### Non-Blocking Warnings (Informational Alerts)
+1. **Target Missing Values**: Rows with null targets are automatically dropped during partitioning with an explicit warning banner.
+2. **Unused Excluded Columns**: A column marked for exclusion in metadata that was not present in the CSV.
+3. **Data Quality Warnings**: High missingness (>50%) or constant (zero-variance) predictors.
 
 ---
 
-## 6. Streamlit Session State Lifecycle
+## 6. File Fingerprinting & Cache Invalidation
 
-To ensure seamless navigation and prevent stale data contamination:
-- `st.session_state["selected_dataset_id"]`: Tracks current active dataset.
-- `st.session_state["active_dataset_bundle"]`: In-memory cached dataset bundle.
-- `st.session_state["active_split_config"]`: Active split parameters.
-- `st.session_state["active_split_result"]`: Active partitioned datasets.
-- **Contamination Guard**: When a user selects a different dataset from the dropdown, all previous split results and downstream model states are automatically invalidated and purged from Session State.
+Streamlit caching in `pages/dataset.py` is keyed by both Dataset ID and a deterministic **File Fingerprint**:
+$$\text{Fingerprint} = \text{FileSize}_{\text{bytes}} \text{ \_ } \text{SHA256}_{[:16]}$$
+
+- When a CSV file in `data/raw/` is replaced or updated, the fingerprint changes automatically.
+- Streamlit cache misses immediately, reloading and re-validating the fresh dataset bundle.
+
+---
+
+## 7. Split Configuration State & Guidance
+
+1. **Strategy Guidance**:
+   - For time-series datasets (`appliances_energy`), selecting Random Split displays an educational warning explaining lookahead data leakage.
+   - For panel datasets (`life_expectancy`), selecting Random Split displays an entity contamination warning.
+   - Incompatible strategies (e.g. Temporal split without timestamp) are automatically filtered out.
+2. **Active vs Outdated Split State**:
+   - The UI displays an **Active Partition Configuration Card** indicating the exact strategy, proportions, and seed used to generate the active split.
+   - If the user changes any parameter in the UI without re-executing, the partition status immediately transitions to **`⚠️ State: Outdated`** with a prompt to re-run.
+
+---
+
+## 8. Dual Testing Architecture
+
+To guarantee 100% reproducible testing across CI and offline environments:
+
+1. **Offline Unit Tests** (`tests/test_dataset_engine.py` & `tests/test_structure.py`):
+   - Runs completely offline using in-memory synthetic fixtures.
+   - Requires zero external downloads or network access.
+   - Command:
+     ```bash
+     pytest tests/test_dataset_engine.py tests/test_structure.py -v
+     ```
+2. **Real-Dataset Integration Workflow** (`tests/test_integration_datasets.py`):
+   - Locates or downloads the 4 authentic benchmark datasets.
+   - Verifies cryptographic SHA-256 signatures.
+   - Validates real schemas and executes real splits.
+   - Command:
+     ```bash
+     python tests/run_integration_tests.py
+     ```

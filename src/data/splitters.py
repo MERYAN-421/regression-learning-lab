@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 from src.data.models import DatasetMetadata, SplitConfig, SplitResult, SplitStrategy
+from src.data.validation import validate_dataset_schema
 
 
 class DataSplittingError(Exception):
@@ -23,12 +24,29 @@ def split_dataset(
     """
     Execute deterministic data splitting into Train, Validation, and Test partitions.
     Guarantees non-overlapping indices and zero data leakage.
+    Blocks execution if critical schema errors are detected.
     """
     config.validate()
     warnings: List[str] = []
 
     if len(feature_df) == 0:
         raise DataSplittingError("Cannot split an empty dataset")
+
+    # Enforce mandatory 14-39 usable predictor constraint
+    if not (14 <= feature_df.shape[1] <= 39):
+        raise DataSplittingError(
+            f"Dataset splitting blocked: Usable feature count ({feature_df.shape[1]}) "
+            f"violates the mandatory 14–39 requirement."
+        )
+
+    # Enforce schema validation if raw_df is available
+    if raw_df is not None:
+        report = validate_dataset_schema(raw_df, metadata)
+        if report.has_blocking_errors:
+            raise DataSplittingError(
+                f"Dataset splitting blocked by critical schema validation errors: "
+                f"{report.blocking_errors}"
+            )
 
     # 1. Target Missingness Handling
     valid_mask = target_series.notnull()

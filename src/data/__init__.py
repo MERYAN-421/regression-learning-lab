@@ -22,6 +22,8 @@ from src.data.loader import (
     split_features_and_target,
     check_dataset_availability,
     resolve_dataset_path,
+    compute_file_fingerprint,
+    get_dataset_fingerprint,
     DatasetNotFoundError,
     DatasetParsingError,
 )
@@ -60,6 +62,8 @@ __all__ = [
     "split_features_and_target",
     "check_dataset_availability",
     "resolve_dataset_path",
+    "compute_file_fingerprint",
+    "get_dataset_fingerprint",
     "DatasetNotFoundError",
     "DatasetParsingError",
     "validate_dataset_schema",

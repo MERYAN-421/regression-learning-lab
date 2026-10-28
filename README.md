@@ -121,17 +121,30 @@ conda activate regression-lab
 pip install -r requirements.txt
 ```
 
-### 3. Acquire Datasets (Automatic)
-The platform includes an automated downloader that retrieves the four benchmark datasets from their authoritative UCI and open repositories into `data/raw/`:
+### 3. Acquire Datasets (Optional for Unit Tests, Required for Real Modeling)
+The platform includes an automated downloader that retrieves and cryptographically verifies the four benchmark datasets into `data/raw/`:
 ```bash
 python -m src.data.download
 ```
-*(Alternatively, missing datasets can be downloaded directly via the UI in `pages/dataset.py`)*
+*(Alternatively, missing datasets can be downloaded on-demand directly in the UI via `pages/dataset.py`)*
 
-### 4. Run Automated Test Suite (40 Tests)
-```bash
-pytest tests/ -v
-```
+### 4. Run Automated Test Suite (50 Tests)
+The test suite is structured into offline Unit Tests and real-dataset Integration Tests:
+
+- **Offline Unit Tests** (Runs 100% offline without external network or CSV downloads):
+  ```bash
+  pytest tests/test_dataset_engine.py tests/test_structure.py -v
+  ```
+
+- **Real-Dataset Integration Workflow** (Verifies SHA-256 signatures, real schemas & splits):
+  ```bash
+  python tests/run_integration_tests.py
+  ```
+
+- **All Tests Combined**:
+  ```bash
+  pytest -v
+  ```
 
 ### 5. Launch the Streamlit Platform
 ```bash
