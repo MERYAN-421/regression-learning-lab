@@ -1,0 +1,61 @@
+catalog_version: "1.0.0"
+description: "Catalog specification for Kaggle Regression Datasets (14-39 features)"
+
+datasets:
+  - id: "house_prices"
+    name: "House Prices: Advanced Regression Techniques"
+    source: "kaggle:c/house-prices-advanced-regression-techniques"
+    domain: "Real Estate Valuation"
+    target_variable: "SalePrice"
+    target_type: "continuous"
+    target_unit: "USD"
+    expected_rows: 1460
+    feature_count: 36
+    statistical_challenges:
+      - "Severe right-skew in target distribution"
+      - "High multicollinearity among structural features (e.g. GrLivArea, TotalBsmtSF)"
+      - "Heteroscedasticity across higher price tiers"
+    status: "cataloged_for_milestone_1"
+
+  - id: "concrete_strength"
+    name: "Concrete Compressive Strength"
+    source: "kaggle:uciml/concrete-data"
+    domain: "Civil Engineering Materials"
+    target_variable: "CompressiveStrength"
+    target_type: "continuous"
+    target_unit: "MPa"
+    expected_rows: 1030
+    feature_count: 15
+    statistical_challenges:
+      - "Non-linear ingredient mixture interactions"
+      - "Varying feature scales"
+      - "Moderate non-normality of residuals"
+    status: "cataloged_for_milestone_1"
+
+  - id: "vehicle_fuel_efficiency"
+    name: "Vehicle Characteristics & Fuel Consumption"
+    source: "kaggle:epa/fuel-economy-data"
+    domain: "Automotive Engineering"
+    target_variable: "Comb_L100km"
+    target_type: "continuous"
+    target_unit: "L/100km"
+    expected_rows: 3980
+    feature_count: 18
+    statistical_challenges:
+      - "High collinearity between Engine Displacement and Cylinders"
+      - "Outliers in exotic and heavy commercial vehicles"
+    status: "cataloged_for_milestone_1"
+
+  - id: "medical_cost_personal"
+    name: "Medical Cost Personal Datasets"
+    source: "kaggle:mirichoi0218/insurance"
+    domain: "Healthcare Actuarial"
+    target_variable: "charges"
+    target_type: "continuous"
+    target_unit: "USD"
+    expected_rows: 2760
+    feature_count: 14
+    statistical_challenges:
+      - "Strong categorical interaction (Smoker x BMI)"
+      - "Bimodal distribution of residuals without interaction terms"
+    status: "cataloged_for_milestone_1"

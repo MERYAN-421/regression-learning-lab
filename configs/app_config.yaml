@@ -1,0 +1,30 @@
+app:
+  name: "Regression Learning Lab"
+  version: "0.1.0"
+  edition: "Academic Edition"
+  theme: "light"
+  default_test_size: 0.2
+  default_random_seed: 42
+
+milestones:
+  current: "Milestone 0"
+  status: "Project Foundation Initialized"
+  roadmap:
+    - id: "milestone_0"
+      name: "Project Foundation & Multi-page Architecture"
+      status: "completed"
+    - id: "milestone_1"
+      name: "Dataset Library & Preprocessing"
+      status: "scheduled"
+    - id: "milestone_2"
+      name: "Exploratory Data Analysis & Feature Selection"
+      status: "scheduled"
+    - id: "milestone_3"
+      name: "Multiple Linear Regression & Evaluation"
+      status: "scheduled"
+    - id: "milestone_4"
+      name: "Five Regression Assumptions & Diagnostics"
+      status: "scheduled"
+    - id: "milestone_5"
+      name: "Experiment Comparison & Learning Report"
+      status: "scheduled"

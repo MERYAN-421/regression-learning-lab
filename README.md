@@ -1,55 +1,136 @@
-# Regression Learning Lab (迴歸分析互動學習實驗室)
+# 📈 Regression Learning Lab
 
-一個基於 Streamlit 的互動式迴歸分析教學與實驗平台，協助使用者從資料探索、特徵選擇、模型擬合、評估指標、殘差診斷到模型比較與報告匯出，完成完整的迴歸分析工作流程。
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-FF4B4B.svg?style=flat&logo=Streamlit&logoColor=white)](https://streamlit.io/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/Milestone-0%20Completed-success.svg)]()
+
+> **Interactive Multiple Linear Regression & Statistical Diagnostics Platform**  
+> An educational web platform designed for data science and statistics students to explore real-world regression modeling, feature selection, and the classical Gauss-Markov assumptions using curated Kaggle tabular datasets (14–39 features).
 
 ---
 
-## 專案結構 (Project Structure)
+## 🌟 Key Highlights
+
+- **Pedagogical Rigor**: Bridges the gap between predictive machine learning and econometric inference.
+- **Two Learning Modalities**:
+  - **Guided Learning**: Step-by-step sequential path through the 8-stage data science lifecycle.
+  - **Free Experiment**: Open sandbox for custom feature subsets, regularization penalties, and hypothesis tests.
+- **Real-World Kaggle Benchmarks**: Datasets featuring 14 to 39 predictors exhibiting authentic challenges (collinearity, skewness, heteroscedasticity).
+- **Five Classical Gauss-Markov Diagnostics**:
+  1. *Linearity* (Ramsey RESET & Residuals vs. Fitted)
+  2. *Independence* (Durbin-Watson, Ljung-Box & ACF)
+  3. *Homoscedasticity* (Breusch-Pagan, White's Test & Scale-Location)
+  4. *Normality* (Jarque-Bera, Shapiro-Wilk & Normal Q-Q Plot)
+  5. *Multicollinearity* (Variance Inflation Factor & Matrix Condition Number)
+- **Influential Point Triage**: Cook's distance and Hat matrix leverage analysis.
+- **Reproducible Academic Reports**: Automatic synthesis of empirical findings into exportable Markdown, HTML, and Python reproduction scripts.
+
+---
+
+## 🏛️ Project Architecture
 
 ```text
 regression-learning-lab/
 │
-├── app.py                     # 主入口程式 (Streamlit entry point)
-├── requirements.txt           # 專案依賴套件清單
-├── README.md                  # 專案說明文件
-├── .gitignore                 # Git 忽略檔案設定
+├── app.py                     # Streamlit main entrypoint & navigation controller
+├── requirements.txt           # Verified Python 3.11 dependencies
+├── README.md                  # Project overview, installation, and roadmap
+├── .gitignore                 # Git ignore rules for caches, envs, and large data
 │
 ├── .streamlit/
-│   └── config.toml            # Streamlit 主題與伺服器設定
+│   └── config.toml            # Streamlit theme & server configuration
 │
-├── pages/                     # 各工作流程頁面
-│   ├── home.py                # 首頁：平台介紹與流程導引
-│   ├── dataset.py             # 1. 資料集上傳與載入
-│   ├── exploration.py         # 2. 探索性資料分析 (EDA)
-│   ├── feature_selection.py   # 3. 特徵工程與選擇
-│   ├── regression.py          # 4. 迴歸模型建立與擬合
-│   ├── evaluation.py          # 5. 模型成效評估
-│   ├── diagnostics.py         # 6. 殘差診斷與假設檢定
-│   ├── comparison.py          # 7. 多模型對比與分析
-│   └── report.py              # 8. 綜合報告生成與匯出
+├── pages/                     # Multi-page application structure
+│   ├── home.py                # Home: Objectives, learning modes & roadmap
+│   ├── dataset.py             # Module 1: Kaggle dataset library & partitioning
+│   ├── exploration.py         # Module 2: EDA, distributions & correlation matrix
+│   ├── feature_selection.py   # Module 3: Filter, Wrapper, and Lasso L1 selection
+│   ├── regression.py          # Module 4: Ordinary Least Squares (OLS) modeling
+│   ├── evaluation.py          # Module 5: Metrics (MSE, RMSE, MAE, R², Adj R²)
+│   ├── diagnostics.py         # Module 6: Five Gauss-Markov assumption tests
+│   ├── comparison.py          # Module 7: Multi-model comparison & radar chart
+│   └── report.py              # Module 8: Comprehensive lab report generator
 │
-├── src/                       # 核心演算法與工具模組 (模組化程式碼)
-├── data/                      # 範例資料集或快取資料
-├── configs/                   # 設定檔 (如預設模型參數等)
-├── tests/                     # 單元測試與功能測試
-└── docs/                      # 相關說明文件與教材
+├── src/                       # Modular Python packages
+│   ├── __init__.py
+│   ├── data/                  # Ingestion, schema validation & partitioning
+│   ├── exploration/           # Descriptive statistics & correlation engine
+│   ├── features/              # Feature selection & VIF reduction
+│   ├── models/                # OLS & regularized regression estimators
+│   ├── evaluation/            # Performance metrics & error visualizers
+│   ├── diagnostics/           # Statistical tests & diagnostic plots
+│   ├── experiments/           # Experiment registry & multi-model comparison
+│   ├── reporting/             # Report synthesis & export formats
+│   └── utils/                 # Path helpers & YAML configuration loaders
+│
+├── configs/                   # Declarative system & dataset configurations
+│   ├── app_config.yaml        # Application parameters & milestone definitions
+│   └── datasets.yaml          # Kaggle dataset catalog schema & definitions
+│
+├── data/                      # Local data directory (raw & processed cache)
+│   └── README.md
+│
+├── tests/                     # Automated test suites
+│   ├── __init__.py
+│   └── test_structure.py      # Architecture, importability & schema tests
+│
+└── docs/                      # Technical specifications & statistical references
+    ├── PROJECT_SPEC.md        # Comprehensive system specification
+    ├── DATASET_CATALOG.md     # Kaggle dataset inclusion criteria & schema
+    └── STATISTICAL_METHODS.md # Mathematical definitions, hypotheses & decision rules
 ```
 
 ---
 
-## 快速開始 (Quick Start)
+## 🚀 Quick Start Guide
 
-### 1. 啟用 Conda 環境
+### 1. Prerequisites
+Ensure you have Python 3.11 installed. We strongly recommend creating a dedicated Conda environment:
+
 ```bash
+conda create -n regression-lab python=3.11 -y
 conda activate regression-lab
 ```
 
-### 2. 安裝依賴套件
+### 2. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. 啟動 Streamlit 應用程式
+### 3. Run Automated Architecture Tests
 ```bash
-streamlit run app.py
+pytest tests/
 ```
+
+### 4. Launch the Streamlit Platform
+```bash
+python -m streamlit run app.py
+```
+Open your browser and navigate to `http://localhost:8501`.
+
+---
+
+## 🗺️ Milestone Roadmap
+
+| Milestone | Phase | Description | Status |
+| :---: | :--- | :--- | :---: |
+| **0** | **Project Foundation** | Architecture, multi-page routing, light UI theme, documentation, tests, Git/GitHub setup | ✅ **Completed** |
+| **1** | **Dataset & Preprocessing** | Kaggle datasets (14–39 features), data ingestion, validation, and splitting | ⏳ Scheduled |
+| **2** | **EDA & Feature Selection** | Univariate/bivariate analysis, correlation heatmaps, VIF, Filter, Wrapper, Lasso | ⏳ Scheduled |
+| **3** | **Regression & Evaluation** | statsmodels OLS fitting, econometric summary table, LaTeX equations, MSE/RMSE/R² | ⏳ Scheduled |
+| **4** | **Assumption Diagnostics** | Five Gauss-Markov diagnostic tests, residual plots, Cook's distance, leverage | ⏳ Scheduled |
+| **5** | **Comparison & Reporting** | Side-by-side experiment comparison, radar plots, exportable lab reports | ⏳ Scheduled |
+
+---
+
+## 📖 Documentation Reference
+
+- **[PROJECT_SPEC.md](docs/PROJECT_SPEC.md)**: Full architecture, page hierarchy, and component specifications.
+- **[DATASET_CATALOG.md](docs/DATASET_CATALOG.md)**: Candidate Kaggle datasets, criteria (14–39 features), and schema.
+- **[STATISTICAL_METHODS.md](docs/STATISTICAL_METHODS.md)**: Mathematical formulations, null hypotheses ($H_0$), test statistics, and decision thresholds.
+
+---
+
+## 👥 Contributors & Academic License
+Designed for academic coursework and interactive statistical learning. Released under the MIT License.
