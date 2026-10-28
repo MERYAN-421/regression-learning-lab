@@ -1,7 +1,9 @@
 """
 Feature mapping module: bridges original dataset predictors to encoded model columns.
-Ensures that a categorical feature with multiple One-Hot dummies is correctly tracked,
-scored, and selected as ONE original feature entity.
+Uses structural introspection of fitted ColumnTransformer, Pipeline, and OneHotEncoder
+components rather than fragile substring parsing.
+Guarantees correct grouping of dummy columns even with overlapping feature names,
+names with prefixes/suffixes, and categories containing underscores.
 """
 from typing import Dict, List, Tuple
 import pandas as pd
@@ -15,7 +17,7 @@ def build_feature_mappings_from_transformer(
     original_df: pd.DataFrame
 ) -> Tuple[List[OriginalFeatureMapping], List[str]]:
     """
-    Constructs OriginalFeatureMapping instances from a fitted ColumnTransformer.
+    Constructs OriginalFeatureMapping instances structurally from a fitted ColumnTransformer.
     
     Parameters:
         preprocessor: Fitted ColumnTransformer instance.
@@ -24,56 +26,96 @@ def build_feature_mappings_from_transformer(
     Returns:
         (mappings, all_encoded_names): List of feature mappings and list of all encoded column names.
     """
-    encoded_names = list(preprocessor.get_feature_names_out())
-    name_to_index = {name: idx for idx, name in enumerate(encoded_names)}
+    all_encoded_names = list(preprocessor.get_feature_names_out())
+    mappings_by_name: Dict[str, OriginalFeatureMapping] = {}
 
-    mappings: List[OriginalFeatureMapping] = []
+    # 1. Map numeric features structurally
+    if hasattr(preprocessor, "output_indices_") and "num" in preprocessor.output_indices_:
+        num_slice = preprocessor.output_indices_["num"]
+        num_cols = None
+        for name, trans, cols in preprocessor.transformers_:
+            if name == "num":
+                num_cols = cols
+                break
 
-    numeric_cols = original_df.select_dtypes(include=["number"]).columns.tolist()
-    categorical_cols = [c for c in original_df.columns if c not in numeric_cols]
+        if num_cols and num_slice.start is not None and num_slice.stop is not None:
+            start = num_slice.start
+            for i, col in enumerate(num_cols):
+                idx = start + i
+                enc_name = all_encoded_names[idx]
+                mappings_by_name[col] = OriginalFeatureMapping(
+                    original_name=col,
+                    feature_type="numeric",
+                    encoded_column_names=[enc_name],
+                    encoded_column_indices=[idx],
+                    is_selected=False,
+                    rank=0,
+                    score=0.0
+                )
 
+    # 2. Map categorical features structurally via encoder.categories_
+    if hasattr(preprocessor, "output_indices_") and "cat" in preprocessor.output_indices_:
+        cat_slice = preprocessor.output_indices_["cat"]
+        cat_pipe = preprocessor.named_transformers_.get("cat")
+        cat_cols = None
+        for name, trans, cols in preprocessor.transformers_:
+            if name == "cat":
+                cat_cols = cols
+                break
+
+        if cat_cols and cat_slice.start is not None and cat_slice.stop is not None and cat_pipe is not None:
+            # Retrieve the fitted OneHotEncoder step
+            encoder = None
+            if hasattr(cat_pipe, "named_steps") and "encoder" in cat_pipe.named_steps:
+                encoder = cat_pipe.named_steps["encoder"]
+            elif hasattr(cat_pipe, "categories_"):
+                encoder = cat_pipe
+
+            if encoder is not None and hasattr(encoder, "categories_"):
+                curr_idx = cat_slice.start
+                for i, col in enumerate(cat_cols):
+                    n_categories = len(encoder.categories_[i])
+                    col_indices = list(range(curr_idx, curr_idx + n_categories))
+                    col_names = [all_encoded_names[j] for j in col_indices]
+                    curr_idx += n_categories
+
+                    mappings_by_name[col] = OriginalFeatureMapping(
+                        original_name=col,
+                        feature_type="categorical",
+                        encoded_column_names=col_names,
+                        encoded_column_indices=col_indices,
+                        is_selected=False,
+                        rank=0,
+                        score=0.0
+                    )
+
+    # 3. Fallback for any unmapped columns (e.g. custom or single transformer)
     for orig_col in original_df.columns:
-        is_num = orig_col in numeric_cols
-        feat_type = "numeric" if is_num else "categorical"
+        if orig_col not in mappings_by_name:
+            is_num = pd.api.types.is_numeric_dtype(original_df[orig_col])
+            # Strict prefix pattern
+            prefix_num = f"num__{orig_col}"
+            prefix_cat = f"cat__{orig_col}_"
+            matched_indices = []
+            matched_names = []
+            for idx, enc_name in enumerate(all_encoded_names):
+                if enc_name == prefix_num or enc_name.startswith(prefix_cat):
+                    matched_indices.append(idx)
+                    matched_names.append(enc_name)
 
-        # Search for corresponding encoded names
-        # ColumnTransformer prefixes names like 'num__col' or 'cat__col_val'
-        matching_encoded = []
-        matching_indices = []
+            mappings_by_name[orig_col] = OriginalFeatureMapping(
+                original_name=orig_col,
+                feature_type="numeric" if is_num else "categorical",
+                encoded_column_names=matched_names,
+                encoded_column_indices=matched_indices,
+                is_selected=False,
+                rank=0,
+                score=0.0
+            )
 
-        if is_num:
-            # Pattern 'num__<col>'
-            target_prefix = f"num__{orig_col}"
-            for enc_name in encoded_names:
-                if enc_name == target_prefix or enc_name.endswith(f"__{orig_col}") or enc_name == orig_col:
-                    matching_encoded.append(enc_name)
-                    matching_indices.append(name_to_index[enc_name])
-        else:
-            # Pattern 'cat__<col>_<val>'
-            target_prefix = f"cat__{orig_col}_"
-            for enc_name in encoded_names:
-                if enc_name.startswith(target_prefix) or f"__{orig_col}_" in enc_name:
-                    matching_encoded.append(enc_name)
-                    matching_indices.append(name_to_index[enc_name])
-
-        # Fallback if prefix convention differs
-        if not matching_encoded:
-            for enc_name in encoded_names:
-                if orig_col in enc_name:
-                    matching_encoded.append(enc_name)
-                    matching_indices.append(name_to_index[enc_name])
-
-        mappings.append(OriginalFeatureMapping(
-            original_name=orig_col,
-            feature_type=feat_type,
-            encoded_column_names=matching_encoded,
-            encoded_column_indices=matching_indices,
-            is_selected=False,
-            rank=0,
-            score=0.0
-        ))
-
-    return mappings, encoded_names
+    # Preserve exact column ordering from original_df
+    ordered_mappings = [mappings_by_name[col] for col in original_df.columns if col in mappings_by_name]
+    return ordered_mappings, all_encoded_names
 
 
 def get_encoded_indices_for_original_features(

@@ -105,11 +105,11 @@ def run_isolated_cross_validation(
 
     if cv_strategy == "group":
         if groups is None or len(groups) != n_samples:
-            # Fallback if groups not provided
-            cv = KFold(n_splits=cv_folds, shuffle=True, random_state=random_seed)
-            splits = cv.split(X_train, y_train)
-        else:
-            splits = cv.split(X_train, y_train, groups=groups)
+            raise ValueError(
+                f"Group cross-validation strategy requires aligned group labels (e.g. Country). "
+                f"Expected {n_samples} group labels, but received {len(groups) if groups is not None else 'None'}."
+            )
+        splits = cv.split(X_train, y_train, groups=groups)
     else:
         splits = cv.split(X_train, y_train)
 
@@ -118,8 +118,10 @@ def run_isolated_cross_validation(
     for fold_idx, (tr_idx, val_idx) in enumerate(splits):
         f_X_train = X_train.iloc[tr_idx]
         f_y_train = y_train.iloc[tr_idx].values
+        f_y_series = y_train.iloc[tr_idx]
         f_X_val = X_train.iloc[val_idx]
         f_y_val = y_train.iloc[val_idx].values
+        f_groups = groups.iloc[tr_idx] if groups is not None else None
 
         # 1. Fit preprocessor on fold-train only
         preproc, _, _ = fit_train_preprocessor(f_X_train, scale_numeric=True)
@@ -129,7 +131,16 @@ def run_isolated_cross_validation(
         f_X_val_enc = preproc.transform(f_X_val)
 
         # 2. Run feature selector on fold-train only
-        selected_mappings = selector_fn(f_X_tr_enc, f_y_train, f_mappings)
+        try:
+            selected_mappings = selector_fn(
+                f_X_tr_enc, f_y_train, f_mappings,
+                f_X_train=f_X_train,
+                f_y_series=f_y_series,
+                f_groups=f_groups
+            )
+        except TypeError:
+            selected_mappings = selector_fn(f_X_tr_enc, f_y_train, f_mappings)
+
         selected_orig_names = [m.original_name for m in selected_mappings if m.is_selected]
         selected_indices = get_encoded_indices_for_original_features(f_mappings, selected_orig_names)
 

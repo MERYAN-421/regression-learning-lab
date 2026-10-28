@@ -10,6 +10,8 @@ Methods:
 7. Backward Sequential Feature Selection (Wrapper)
 8. Lasso-based Selection (Embedded)
 """
+import hashlib
+import json
 import time
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
@@ -35,18 +37,17 @@ from src.features.wrapper_methods import (
 )
 from src.features.embedded_methods import select_by_lasso
 from src.features.evaluation import (
-    evaluate_feature_subset_on_validation,
-    run_isolated_cross_validation
+    run_isolated_cross_validation,
+    evaluate_feature_subset_on_validation
 )
 
-
-FEATURE_SELECTION_REGISTRY = {
+FEATURE_SELECTION_REGISTRY: Dict[str, Dict[str, Any]] = {
     "baseline": {
         "id": "baseline",
         "name": "All Features",
         "category": "Baseline",
         "requires_k": False,
-        "description": "Retains all eligible original predictors as the benchmark reference.",
+        "description": "Baseline reference retaining all available original predictor variables without screening.",
         "complexity": "O(1)"
     },
     "pearson": {
@@ -54,7 +55,7 @@ FEATURE_SELECTION_REGISTRY = {
         "name": "Pearson Correlation",
         "category": "Filter",
         "requires_k": True,
-        "description": "Ranks features by absolute linear correlation with target. Maximum correlation across dummy columns represents categorical predictors.",
+        "description": "Ranks original features by absolute linear correlation with target. Groups dummy columns by maximum level magnitude.",
         "complexity": "O(N * P)"
     },
     "f_test": {
@@ -62,7 +63,7 @@ FEATURE_SELECTION_REGISTRY = {
         "name": "F-test (f_regression)",
         "category": "Filter",
         "requires_k": True,
-        "description": "Ranks features by univariate linear regression F-statistic. Evaluates single-predictor explanatory power.",
+        "description": "Evaluates univariate linear regression F-statistic. Ranks dummy groups by maximum F-score.",
         "complexity": "O(N * P)"
     },
     "mutual_information": {
@@ -106,6 +107,35 @@ FEATURE_SELECTION_REGISTRY = {
         "complexity": "O(N * P * iterations)"
     }
 }
+
+
+def compute_experiment_identity(
+    dataset_fingerprint: str,
+    split_fingerprint: str,
+    method_id: str,
+    k: int,
+    cv_strategy: str,
+    cv_folds: int,
+    random_seed: int,
+    alpha: Optional[float] = None
+) -> str:
+    """
+    Computes a deterministic, collision-free SHA-256 hash identity of the entire
+    experiment configuration.
+    """
+    config_dict = {
+        "dataset_fingerprint": str(dataset_fingerprint),
+        "split_fingerprint": str(split_fingerprint),
+        "method_id": str(method_id),
+        "k": int(k),
+        "cv_strategy": str(cv_strategy),
+        "cv_folds": int(cv_folds),
+        "random_seed": int(random_seed),
+        "alpha": float(alpha) if alpha is not None else None,
+    }
+    raw_json = json.dumps(config_dict, sort_keys=True)
+    hash_hex = hashlib.sha256(raw_json.encode("utf-8")).hexdigest()[:12]
+    return f"exp_{method_id}_k{k}_cv{cv_folds}_{hash_hex}"
 
 
 def run_feature_selection(
@@ -160,11 +190,23 @@ def run_feature_selection(
     elif method_id == "rfe":
         selected_mappings = select_by_group_rfe(X_train_enc, y_train.values, mappings, k=k_bounded)
     elif method_id == "forward_sfs":
-        selected_mappings = select_by_group_forward_sfs(X_train_enc, y_train.values, mappings, k=k_bounded, cv_folds=min(3, cv_folds))
+        selected_mappings = select_by_group_forward_sfs(
+            X_train, y_train, mappings, k=k_bounded,
+            cv_strategy=cv_strategy, cv_folds=min(3, cv_folds),
+            random_seed=random_seed, groups_train=groups_train
+        )
     elif method_id == "backward_sfs":
-        selected_mappings = select_by_group_backward_sfs(X_train_enc, y_train.values, mappings, k=k_bounded, cv_folds=min(3, cv_folds))
+        selected_mappings = select_by_group_backward_sfs(
+            X_train, y_train, mappings, k=k_bounded,
+            cv_strategy=cv_strategy, cv_folds=min(3, cv_folds),
+            random_seed=random_seed, groups_train=groups_train
+        )
     elif method_id == "lasso":
-        selected_mappings, lasso_diag = select_by_lasso(X_train_enc, y_train.values, mappings, k=k_bounded, alpha=alpha, random_seed=random_seed)
+        selected_mappings, lasso_diag = select_by_lasso(
+            X_train, y_train, mappings, k=k_bounded, alpha=alpha,
+            cv_strategy=cv_strategy, cv_folds=min(5, cv_folds),
+            random_seed=random_seed, groups_train=groups_train
+        )
         notes = lasso_diag["note"]
         if lasso_diag["natural_nonzero_groups"] != k_bounded:
             warnings.append(
@@ -178,7 +220,7 @@ def run_feature_selection(
     selected_enc_names = get_encoded_names_for_original_features(selected_mappings, selected_orig_features)
 
     # 3. Cross-Validation evaluation with fold isolation
-    def cv_selector(f_X_enc, f_y, f_maps):
+    def cv_selector(f_X_enc, f_y, f_maps, f_X_train=None, f_y_series=None, f_groups=None):
         if method_id == "baseline":
             return select_all_features_baseline(f_maps)
         elif method_id == "pearson":
@@ -190,11 +232,29 @@ def run_feature_selection(
         elif method_id == "rfe":
             return select_by_group_rfe(f_X_enc, f_y, f_maps, k=k_bounded)
         elif method_id == "forward_sfs":
-            return select_by_group_forward_sfs(f_X_enc, f_y, f_maps, k=k_bounded, cv_folds=min(3, cv_folds))
+            tr_df = f_X_train if f_X_train is not None else pd.DataFrame(f_X_enc, columns=[m.original_name for m in f_maps])
+            tr_y = f_y_series if f_y_series is not None else pd.Series(f_y)
+            return select_by_group_forward_sfs(
+                tr_df, tr_y, f_maps, k=k_bounded,
+                cv_strategy=cv_strategy, cv_folds=min(3, cv_folds),
+                random_seed=random_seed, groups_train=f_groups
+            )
         elif method_id == "backward_sfs":
-            return select_by_group_backward_sfs(f_X_enc, f_y, f_maps, k=k_bounded, cv_folds=min(3, cv_folds))
+            tr_df = f_X_train if f_X_train is not None else pd.DataFrame(f_X_enc, columns=[m.original_name for m in f_maps])
+            tr_y = f_y_series if f_y_series is not None else pd.Series(f_y)
+            return select_by_group_backward_sfs(
+                tr_df, tr_y, f_maps, k=k_bounded,
+                cv_strategy=cv_strategy, cv_folds=min(3, cv_folds),
+                random_seed=random_seed, groups_train=f_groups
+            )
         elif method_id == "lasso":
-            res_maps, _ = select_by_lasso(f_X_enc, f_y, f_maps, k=k_bounded, alpha=alpha, random_seed=random_seed)
+            tr_df = f_X_train if f_X_train is not None else pd.DataFrame(f_X_enc, columns=[m.original_name for m in f_maps])
+            tr_y = f_y_series if f_y_series is not None else pd.Series(f_y)
+            res_maps, _ = select_by_lasso(
+                tr_df, tr_y, f_maps, k=k_bounded, alpha=alpha,
+                cv_strategy=cv_strategy, cv_folds=min(5, cv_folds),
+                random_seed=random_seed, groups_train=f_groups
+            )
             return res_maps
         return select_all_features_baseline(f_maps)
 
@@ -219,8 +279,22 @@ def run_feature_selection(
 
     t_elapsed = time.perf_counter() - t_start
 
-    # Unique experiment hash
-    exp_id = f"exp_{method_id}_k{k_bounded}_{split_fingerprint[:8]}"
+    # Compute collision-free experiment identity hash
+    exp_id = compute_experiment_identity(
+        dataset_fingerprint=dataset_fingerprint,
+        split_fingerprint=split_fingerprint,
+        method_id=method_id,
+        k=k_bounded,
+        cv_strategy=cv_strategy,
+        cv_folds=cv_folds,
+        random_seed=random_seed,
+        alpha=alpha
+    )
+
+    total_orig = len(X_train.columns)
+    sel_orig = len(selected_orig_features)
+    full_enc = len(encoded_names)
+    sel_enc = len(selected_enc_names)
 
     return FeatureSelectionResult(
         experiment_id=exp_id,
@@ -232,11 +306,14 @@ def run_feature_selection(
         category=meta_info["category"],
         requested_k=k_bounded,
         selected_original_features=selected_orig_features,
-        selected_original_count=len(selected_orig_features),
+        selected_original_count=sel_orig,
+        total_original_count=total_orig,
         all_original_features=list(X_train.columns),
         encoded_feature_names=encoded_names,
         selected_encoded_feature_names=selected_enc_names,
-        encoded_input_dimension=len(encoded_names),
+        full_encoded_dimension=full_enc,
+        selected_encoded_dimension=sel_enc,
+        encoded_input_dimension=sel_enc,
         feature_mappings=selected_mappings,
         cv_rmse_mean=cv_mean,
         cv_rmse_std=cv_std,

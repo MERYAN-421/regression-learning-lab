@@ -6,29 +6,42 @@ Wrapper-based feature selection methods:
 
 Operates strictly at the original-feature-group level, ensuring that dummy one-hot columns
 belonging to the same categorical predictor are eliminated or added together as a cohesive unit.
+SFS internal evaluation enforces strict inner-fold isolation: fitting imputers, encoders,
+and scalers exclusively on inner fold-training data using dataset-appropriate CV strategies
+(TimeSeriesSplit, GroupKFold, KFold).
 """
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import root_mean_squared_error
 
 from src.features.result_models import OriginalFeatureMapping
+from src.features.preprocessing import fit_train_preprocessor, transform_features
 
 
 def select_by_group_rfe(
-    X_encoded: np.ndarray,
-    y: np.ndarray,
+    X_input: Union[pd.DataFrame, np.ndarray],
+    y_input: Union[pd.Series, np.ndarray],
     mappings: List[OriginalFeatureMapping],
     k: int
 ) -> List[OriginalFeatureMapping]:
     """
     Group-aware Recursive Feature Elimination (Group RFE) with LinearRegression.
-    Eliminates one original feature group per step based on group coefficient L2-norm.
+    Eliminates one original feature group per step based on group coefficient L2-norm:
+        ||beta_g||_2 = sqrt(sum_{j in group} beta_j^2)
     """
     k_target = min(max(1, k), len(mappings))
     active_orig_names = [m.original_name for m in mappings]
     mapping_dict = {m.original_name: m for m in mappings}
+
+    if isinstance(X_input, pd.DataFrame):
+        prep, _, _ = fit_train_preprocessor(X_input, scale_numeric=True)
+        X_encoded = prep.transform(X_input)
+        y = y_input.values if isinstance(y_input, pd.Series) else y_input
+    else:
+        X_encoded = X_input
+        y = y_input
 
     # Elimination history: store (name, elimination_step, score)
     eliminated: List[Tuple[str, float]] = []
@@ -97,7 +110,6 @@ def select_by_group_rfe(
         )
 
     # Assign ranks for eliminated features (from k_target+1 to total)
-    # Most recently eliminated has rank k_target+1
     for rank_offset, (name, sc) in enumerate(reversed(eliminated)):
         m = mapping_dict[name]
         updated_dict[name] = OriginalFeatureMapping(
@@ -114,47 +126,53 @@ def select_by_group_rfe(
     return [updated_dict[m.original_name] for m in mappings]
 
 
-def _evaluate_feature_subset_cv(
-    X_encoded: np.ndarray,
-    y: np.ndarray,
-    active_indices: List[int],
-    cv_folds: int = 3
+def _evaluate_candidate_subset_inner_cv(
+    subset_orig_names: List[str],
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    inner_splits: List[Tuple[np.ndarray, np.ndarray]]
 ) -> float:
-    """Internal helper: computes mean CV RMSE for a subset of encoded column indices."""
-    if not active_indices:
+    """
+    Evaluates candidate original-feature subset with strict inner-fold isolation.
+    Fits imputer, encoder, and scaler strictly on each inner fold-training slice.
+    """
+    if not subset_orig_names:
         return 1e9
 
-    n_samples = len(y)
-    fold_size = n_samples // cv_folds
-    rmses = []
+    fold_rmses: List[float] = []
+    for tr_idx, val_idx in inner_splits:
+        sub_X_tr = X_train.iloc[tr_idx][subset_orig_names]
+        sub_y_tr = y_train.iloc[tr_idx].values
+        sub_X_val = X_train.iloc[val_idx][subset_orig_names]
+        sub_y_val = y_train.iloc[val_idx].values
 
-    sub_X = X_encoded[:, active_indices]
+        # Strict fold isolation: fit preprocessor only on inner fold train
+        inner_prep, _, _ = fit_train_preprocessor(sub_X_tr, scale_numeric=True)
+        X_tr_enc = transform_features(inner_prep, sub_X_tr).values
+        X_val_enc = transform_features(inner_prep, sub_X_val).values
 
-    for f in range(cv_folds):
-        val_idx = np.arange(f * fold_size, min((f + 1) * fold_size, n_samples))
-        tr_idx = np.setdiff1d(np.arange(n_samples), val_idx)
+        model = LinearRegression().fit(X_tr_enc, sub_y_tr)
+        y_pred = model.predict(X_val_enc)
+        rmse = float(root_mean_squared_error(sub_y_val, y_pred))
+        fold_rmses.append(rmse)
 
-        if len(tr_idx) == 0 or len(val_idx) == 0:
-            continue
-
-        model = LinearRegression().fit(sub_X[tr_idx], y[tr_idx])
-        y_pred = model.predict(sub_X[val_idx])
-        rmse = float(root_mean_squared_error(y[val_idx], y_pred))
-        rmses.append(rmse)
-
-    return float(np.mean(rmses)) if rmses else 1e9
+    return float(np.mean(fold_rmses)) if fold_rmses else 1e9
 
 
 def select_by_group_forward_sfs(
-    X_encoded: np.ndarray,
-    y: np.ndarray,
+    X_input: Union[pd.DataFrame, np.ndarray],
+    y_input: Union[pd.Series, np.ndarray],
     mappings: List[OriginalFeatureMapping],
     k: int,
-    cv_folds: int = 3
+    cv_strategy: str = "random",
+    cv_folds: int = 3,
+    random_seed: int = 42,
+    groups_train: Optional[pd.Series] = None
 ) -> List[OriginalFeatureMapping]:
     """
     Group-aware Forward Sequential Feature Selection (Forward SFS).
-    Greedily adds one original feature group per step to minimize internal CV RMSE.
+    Greedily adds one original feature group per step to minimize inner CV RMSE.
+    Enforces fold-isolated preprocessing and dataset-appropriate cross-validation.
     """
     k_target = min(max(1, k), len(mappings))
     mapping_dict = {m.original_name: m for m in mappings}
@@ -162,18 +180,40 @@ def select_by_group_forward_sfs(
     selected_names: List[str] = []
     step_scores: Dict[str, float] = {}
 
+    # Setup DataFrame and CV splits
+    if isinstance(X_input, pd.DataFrame):
+        X_df = X_input
+        y_s = y_input if isinstance(y_input, pd.Series) else pd.Series(y_input, index=X_input.index)
+    else:
+        # Array fallback (for synthetic unit tests)
+        col_names = [m.original_name for m in mappings]
+        X_df = pd.DataFrame(X_input, columns=col_names)
+        y_s = pd.Series(y_input)
+
+    # Reject missing group labels for group CV strategy
+    if cv_strategy == "group":
+        if groups_train is None or len(groups_train) != len(X_df):
+            raise ValueError(
+                f"Group cross-validation strategy requires aligned group labels (e.g. Country). "
+                f"Expected {len(X_df)} items, got {len(groups_train) if groups_train is not None else 'None'}."
+            )
+
+    # Import cv splitter
+    from src.features.evaluation import get_dataset_cv_splitter
+    splitter = get_dataset_cv_splitter(cv_strategy, cv_folds=cv_folds, random_seed=random_seed)
+    if cv_strategy == "group":
+        inner_splits = list(splitter.split(X_df, y_s, groups=groups_train))
+    else:
+        inner_splits = list(splitter.split(X_df, y_s))
+
     while len(selected_names) < k_target and available_names:
         best_candidate = None
-        best_candidate_score = 1e12
+        best_candidate_score = float("inf")
 
         for cand in available_names:
             trial_names = selected_names + [cand]
-            trial_indices = []
-            for name in trial_names:
-                trial_indices.extend(mapping_dict[name].encoded_column_indices)
-            trial_indices = sorted(list(set(trial_indices)))
+            score = _evaluate_candidate_subset_inner_cv(trial_names, X_df, y_s, inner_splits)
 
-            score = _evaluate_feature_subset_cv(X_encoded, y, trial_indices, cv_folds=cv_folds)
             if score < best_candidate_score:
                 best_candidate_score = score
                 best_candidate = cand
@@ -217,33 +257,55 @@ def select_by_group_forward_sfs(
 
 
 def select_by_group_backward_sfs(
-    X_encoded: np.ndarray,
-    y: np.ndarray,
+    X_input: Union[pd.DataFrame, np.ndarray],
+    y_input: Union[pd.Series, np.ndarray],
     mappings: List[OriginalFeatureMapping],
     k: int,
-    cv_folds: int = 3
+    cv_strategy: str = "random",
+    cv_folds: int = 3,
+    random_seed: int = 42,
+    groups_train: Optional[pd.Series] = None
 ) -> List[OriginalFeatureMapping]:
     """
     Group-aware Backward Sequential Feature Selection (Backward SFS).
-    Iteratively removes the original feature group that produces the lowest CV RMSE upon removal.
+    Iteratively removes the original feature group that produces the lowest inner CV RMSE upon removal.
+    Enforces fold-isolated preprocessing and dataset-appropriate cross-validation.
     """
     k_target = min(max(1, k), len(mappings))
     mapping_dict = {m.original_name: m for m in mappings}
     active_names = [m.original_name for m in mappings]
     eliminated: List[Tuple[str, float]] = []
 
+    if isinstance(X_input, pd.DataFrame):
+        X_df = X_input
+        y_s = y_input if isinstance(y_input, pd.Series) else pd.Series(y_input, index=X_input.index)
+    else:
+        col_names = [m.original_name for m in mappings]
+        X_df = pd.DataFrame(X_input, columns=col_names)
+        y_s = pd.Series(y_input)
+
+    if cv_strategy == "group":
+        if groups_train is None or len(groups_train) != len(X_df):
+            raise ValueError(
+                f"Group cross-validation strategy requires aligned group labels (e.g. Country). "
+                f"Expected {len(X_df)} items, got {len(groups_train) if groups_train is not None else 'None'}."
+            )
+
+    from src.features.evaluation import get_dataset_cv_splitter
+    splitter = get_dataset_cv_splitter(cv_strategy, cv_folds=cv_folds, random_seed=random_seed)
+    if cv_strategy == "group":
+        inner_splits = list(splitter.split(X_df, y_s, groups=groups_train))
+    else:
+        inner_splits = list(splitter.split(X_df, y_s))
+
     while len(active_names) > k_target:
         best_to_remove = None
-        best_remaining_score = 1e12
+        best_remaining_score = float("inf")
 
         for cand in active_names:
             trial_names = [n for n in active_names if n != cand]
-            trial_indices = []
-            for name in trial_names:
-                trial_indices.extend(mapping_dict[name].encoded_column_indices)
-            trial_indices = sorted(list(set(trial_indices)))
+            score = _evaluate_candidate_subset_inner_cv(trial_names, X_df, y_s, inner_splits)
 
-            score = _evaluate_feature_subset_cv(X_encoded, y, trial_indices, cv_folds=cv_folds)
             if score < best_remaining_score:
                 best_remaining_score = score
                 best_to_remove = cand

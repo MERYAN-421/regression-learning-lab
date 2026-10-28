@@ -26,11 +26,14 @@
   - Univariate distribution metrics (mean, std, median, skewness, kurtosis, IQR outlier flags).
   - Pearson & Spearman correlation heatmaps with constant feature exclusion.
   - Bivariate scatter plots with OLS trendlines and categorical target box plots.
-- **Feature Selection Laboratory (Milestone 2)**:
+- **Feature Selection Laboratory (Milestone 2 Review Fixes Verified)**:
   - 8 selection methods: Baseline, Pearson, F-test, Mutual Information, RFE, Forward SFS, Backward SFS, and Lasso.
-  - Group-aware categorical mapping (user-facing $K$ strictly counts original predictors, not dummy columns).
-  - Strict fold isolation across KFold, TimeSeriesSplit, and GroupKFold without data leakage.
-  - Side-by-side comparison tables, selection overlap matrices, and RMSE vs K charts.
+  - **Structural Feature Mapping**: Introspects fitted transformer metadata, preventing prefix/substring collisions and handling underscores in category levels.
+  - **Nested SFS Fold Isolation**: Imputer, encoder, and scaler fitted strictly per inner fold; dataset-appropriate splitting (`TimeSeriesSplit`, `GroupKFold`, `KFold`); rejects missing country labels with `ValueError`.
+  - **Dataset-Appropriate Lasso**: Hyperparameter selection with fold-specific preprocessing, deterministic execution, and natural sparsity vs. exact-$K$ ranking distinction.
+  - **Stable Experiment Identity**: 12-char SHA-256 hash incorporating all configuration parameters, ensuring distinct CV settings or alphas never collide.
+  - **Explicit Dimension Hierarchy**: Clear distinction of Total Original Predictors ($P$), Selected Original Predictors ($K$), Full Encoded Dimension ($D_{\text{full}}$), and Selected Encoded Dimension ($D_{\text{sel}}$).
+  - Side-by-side comparison tables, selection overlap matrices, and interactive Plotly charts.
 - **Five Classical Gauss-Markov Diagnostics (Milestone 4)**:
   1. *Linearity* (Ramsey RESET & Residuals vs. Fitted)
   2. *Independence* (Durbin-Watson, Ljung-Box & ACF)
@@ -100,11 +103,11 @@ regression-learning-lab/
 │   ├── app_config.yaml        # Application parameters & milestone definitions
 │   └── datasets.yaml          # Single source of truth for dataset metadata
 │
-├── tests/                     # Automated test suites (84 tests passing)
+├── tests/                     # Automated test suites (92 tests passing)
 │   ├── test_structure.py      # Milestone 0 architecture, navigation & doc tests
 │   ├── test_dataset_engine.py # Milestone 1 Registry, Loader, Splitter & Leakage tests
 │   ├── test_eda.py            # Milestone 2 EDA distribution, correlation & plot tests
-│   ├── test_feature_selection.py # Milestone 2 Preprocessing, 8 selectors & CV tests
+│   ├── test_feature_selection.py # Milestone 2 Preprocessing, 8 selectors, structural mapping & CV leakage tests
 │   └── test_integration_datasets.py # Milestone 2 Real-dataset verification tests
 │
 └── docs/                      # Technical specifications & statistical references
@@ -112,8 +115,8 @@ regression-learning-lab/
     ├── DATASET_CATALOG.md     # Verified CSV schemas, exact predictor counts & audits
     ├── DATA_PIPELINE.md       # Data Engine architecture, splitting logic & Mermaid flow
     ├── EDA_METHODS.md         # EDA formulas, skewness, kurtosis, Pearson vs Spearman
-    ├── FEATURE_SELECTION_METHODS.md # Specifications for all 8 selection algorithms
-    ├── FEATURE_SELECTION_PIPELINE.md# Pipeline, fold isolation & leakage prevention
+    ├── FEATURE_SELECTION_METHODS.md # Specifications for all 8 selection algorithms & empirical table
+    ├── FEATURE_SELECTION_PIPELINE.md# Pipeline, structural mapping, fold isolation & dimension hierarchy
     └── STATISTICAL_METHODS.md # Mathematical definitions, hypotheses & decision thresholds
 ```
 
@@ -139,7 +142,7 @@ python -m src.data.download
 ```
 *(Alternatively, missing datasets can be downloaded on-demand directly in the UI via `pages/dataset.py`)*
 
-### 4. Run Automated Test Suite (84 Tests Passing)
+### 4. Run Automated Test Suite (92 Tests Passing)
 The test suite is structured into offline Unit Tests and real-dataset Integration Tests:
 
 - **Offline Unit Tests** (Runs 100% offline without external network or CSV downloads):
@@ -152,7 +155,7 @@ The test suite is structured into offline Unit Tests and real-dataset Integratio
   python tests/run_integration_tests.py
   ```
 
-- **All 84 Tests Combined**:
+- **All 92 Tests Combined**:
   ```bash
   pytest -v
   ```

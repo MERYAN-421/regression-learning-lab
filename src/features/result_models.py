@@ -1,5 +1,6 @@
 """
 Data models for Feature Selection results, feature mappings, and experiment metadata.
+Distinguishes between total/selected original features and full/selected encoded dimensions.
 """
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -42,10 +43,13 @@ class FeatureSelectionResult:
     requested_k: int
     selected_original_features: List[str]
     selected_original_count: int
+    total_original_count: int
     all_original_features: List[str]
     encoded_feature_names: List[str]
     selected_encoded_feature_names: List[str]
-    encoded_input_dimension: int
+    full_encoded_dimension: int
+    selected_encoded_dimension: int
+    encoded_input_dimension: int  # Aliased to selected_encoded_dimension for backward compatibility
     feature_mappings: List[OriginalFeatureMapping]
     cv_rmse_mean: float
     cv_rmse_std: float
@@ -63,11 +67,11 @@ class FeatureSelectionResult:
         return {
             "Method": self.method_name,
             "Category": self.category,
-            "Requested K": self.requested_k,
-            "Selected Orig K": self.selected_original_count,
-            "Encoded Dim": len(self.selected_encoded_feature_names),
+            "Req K": self.requested_k,
+            "Selected Orig": f"{self.selected_original_count} / {self.total_original_count}",
+            "Selected Enc Dim": f"{self.selected_encoded_dimension} / {self.full_encoded_dimension}",
             "CV RMSE (Mean ± Std)": f"{self.cv_rmse_mean:.3f} ± {self.cv_rmse_std:.3f}",
             "Val RMSE": f"{self.val_rmse:.3f}",
-            "Val R²": f"{self.val_r2:.3f}",
-            "Runtime (s)": f"{self.execution_time_seconds:.2f}s"
+            "Val R²": f"{self.val_r2:.4f}",
+            "Runtime": f"{self.execution_time_seconds:.2f}s"
         }

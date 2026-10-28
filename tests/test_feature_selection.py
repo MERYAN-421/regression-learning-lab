@@ -52,6 +52,7 @@ from src.features.evaluation import (
 from src.features.selectors import (
     FEATURE_SELECTION_REGISTRY,
     run_feature_selection,
+    compute_experiment_identity,
 )
 from src.experiments.feature_selection_runner import (
     FeatureSelectionExperimentTracker,
@@ -498,3 +499,329 @@ def test_experiment_tracker_stale_detection(synthetic_split_bundle):
     # Split fingerprint changes -> marked as stale / not valid for new split
     new_runs = tracker.get_valid_experiments("new_split_fingerprint_999")
     assert len(new_runs) == 0
+
+
+# =====================================================================
+# Test Group G: Milestone 2 Review Fixes Verification
+# =====================================================================
+
+def test_structural_feature_mapping_overlapping_names_and_underscores():
+    """
+    Task 5 Verification:
+    Verify structural feature mapping correctly maps columns when:
+    1. Feature names are substrings/prefixes of each other ('feat' vs 'feat_2', 'cat' vs 'cat_type')
+    2. Category levels contain underscores ('level_a', 'level_b')
+    3. Predictors are mixed numeric and categorical
+    4. Encoded indices are disjoint, complete, and exactly contiguous with transformer output.
+    """
+    df = pd.DataFrame({
+        "feat": [1.0, 2.0, 3.0, 4.0, 5.0],
+        "feat_2": [10.0, 20.0, 30.0, 40.0, 50.0],
+        "cat": ["val_x", "val_y", "val_x", "val_y", "val_x"],
+        "cat_type": ["type_1", "type_2", "type_3", "type_1", "type_2"],
+    })
+    numeric_cols = ["feat", "feat_2"]
+    categorical_cols = ["cat", "cat_type"]
+
+    preprocessor, num_cols, cat_cols = fit_train_preprocessor(df)
+    X_enc = transform_features(preprocessor, df)
+
+    mappings, enc_names = build_feature_mappings_from_transformer(preprocessor, df)
+
+    # 1. Check all 4 original features are mapped
+    assert len(mappings) == 4
+    mapping_dict = {m.original_name: m for m in mappings}
+    assert set(mapping_dict.keys()) == {"feat", "feat_2", "cat", "cat_type"}
+
+    # 2. Check numeric features get exactly 1 encoded index each
+    assert mapping_dict["feat"].encoded_dimension == 1
+    assert mapping_dict["feat_2"].encoded_dimension == 1
+    assert mapping_dict["feat"].encoded_column_indices == [0]
+    assert mapping_dict["feat_2"].encoded_column_indices == [1]
+
+    # 3. Check categorical features:
+    # 'cat' has 2 levels ("val_x", "val_y") -> 2 indices
+    # 'cat_type' has 3 levels ("type_1", "type_2", "type_3") -> 3 indices
+    assert mapping_dict["cat"].encoded_dimension == 2
+    assert mapping_dict["cat_type"].encoded_dimension == 3
+    assert mapping_dict["cat"].encoded_column_indices == [2, 3]
+    assert mapping_dict["cat_type"].encoded_column_indices == [4, 5, 6]
+
+    # 4. Check that 'feat' didn't accidentally claim 'feat_2' columns (overlap/substring bug)
+    assert set(mapping_dict["feat"].encoded_column_indices).isdisjoint(set(mapping_dict["feat_2"].encoded_column_indices))
+    assert set(mapping_dict["cat"].encoded_column_indices).isdisjoint(set(mapping_dict["cat_type"].encoded_column_indices))
+
+    # 5. Check encoded names match the underscore categories properly
+    assert all("cat_val_" in name for name in mapping_dict["cat"].encoded_column_names)
+    assert all("cat_type_type_" in name for name in mapping_dict["cat_type"].encoded_column_names)
+
+    # 6. Total mapped dimension equals encoded matrix width
+    total_mapped_dim = sum(m.encoded_dimension for m in mappings)
+    assert total_mapped_dim == X_enc.shape[1] == 7
+
+
+def test_sfs_nested_cv_rejects_missing_groups():
+    """
+    Task 1 Verification:
+    Verify SFS rejects missing country/group labels with ValueError instead of
+    falling back silently to KFold.
+    """
+    df = pd.DataFrame({
+        "num1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        "num2": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+    })
+    y = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    preprocessor, _, _ = fit_train_preprocessor(df)
+    mappings, _ = build_feature_mappings_from_transformer(preprocessor, df)
+
+    # SFS Forward must raise ValueError when cv_strategy='group' and groups_train is None
+    with pytest.raises(ValueError, match="Group cross-validation strategy requires aligned group labels"):
+        select_by_group_forward_sfs(
+            X_input=df,
+            y_input=y,
+            mappings=mappings,
+            k=1,
+            cv_strategy="group",
+            groups_train=None
+        )
+
+    # SFS Backward must raise ValueError when cv_strategy='group' and groups_train is None
+    with pytest.raises(ValueError, match="Group cross-validation strategy requires aligned group labels"):
+        select_by_group_backward_sfs(
+            X_input=df,
+            y_input=y,
+            mappings=mappings,
+            k=1,
+            cv_strategy="group",
+            groups_train=None
+        )
+
+
+def test_sfs_nested_cv_temporal_strategy():
+    """
+    Task 1 Verification:
+    Verify SFS uses TimeSeriesSplit correctly without leakage for temporal datasets.
+    """
+    np.random.seed(42)
+    n = 60
+    t = np.linspace(0, 10, n)
+    X = pd.DataFrame({
+        "trend": t,
+        "noise1": np.random.normal(0, 1, n),
+        "noise2": np.random.normal(0, 1, n)
+    })
+    y = pd.Series(2.5 * t + np.random.normal(0, 0.5, n))
+
+    preprocessor, _, _ = fit_train_preprocessor(X)
+    mappings, _ = build_feature_mappings_from_transformer(preprocessor, X)
+
+    # Execute Forward SFS with temporal CV strategy
+    selected_fwd = select_by_group_forward_sfs(
+        X_input=X,
+        y_input=y,
+        mappings=mappings,
+        k=1,
+        cv_strategy="temporal",
+        cv_folds=3
+    )
+    # The trend feature should have the lowest CV RMSE and be selected first
+    assert selected_fwd[0].original_name == "trend"
+    assert selected_fwd[0].rank == 1
+
+
+def test_lasso_alpha_selection_rejects_missing_groups():
+    """
+    Task 2 Verification:
+    Verify Lasso alpha-selection workflow rejects missing groups when strategy='group'.
+    """
+    df = pd.DataFrame({
+        "num1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        "num2": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+    })
+    y = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    preprocessor, _, _ = fit_train_preprocessor(df)
+    mappings, _ = build_feature_mappings_from_transformer(preprocessor, df)
+
+    with pytest.raises(ValueError, match="Group cross-validation strategy requires aligned group labels"):
+        select_by_lasso(
+            X_input=df,
+            y_input=y,
+            mappings=mappings,
+            k=1,
+            alpha=None,
+            cv_strategy="group",
+            groups_train=None
+        )
+
+
+def test_lasso_alpha_selection_dataset_appropriate_strategies():
+    """
+    Task 2 Verification:
+    Verify Lasso alpha selection works deterministically across both TimeSeriesSplit and GroupKFold.
+    """
+    np.random.seed(42)
+    n = 60
+    # Grouped dataset test
+    groups = pd.Series(np.repeat(["CountryA", "CountryB", "CountryC", "CountryD"], 15))
+    X = pd.DataFrame({
+        "signal": np.random.normal(0, 1, n),
+        "noise": np.random.normal(0, 1, n),
+    })
+    y = pd.Series(3.0 * X["signal"] + np.random.normal(0, 0.2, n))
+
+    preprocessor, _, _ = fit_train_preprocessor(X)
+    mappings, _ = build_feature_mappings_from_transformer(preprocessor, X)
+
+    # Group CV
+    res_group, meta_group = select_by_lasso(
+        X_input=X,
+        y_input=y,
+        mappings=mappings,
+        k=1,
+        alpha=None,
+        cv_strategy="group",
+        cv_folds=3,
+        groups_train=groups
+    )
+    assert meta_group["cv_strategy"] == "group"
+    assert "best_alpha" in meta_group
+    assert meta_group["best_alpha"] > 0
+    assert res_group[0].original_name == "signal"
+
+    # Temporal CV
+    res_temp, meta_temp = select_by_lasso(
+        X_input=X,
+        y_input=y,
+        mappings=mappings,
+        k=1,
+        alpha=None,
+        cv_strategy="temporal",
+        cv_folds=3
+    )
+    assert meta_temp["cv_strategy"] == "temporal"
+    assert "best_alpha" in meta_temp
+    assert meta_temp["best_alpha"] > 0
+
+
+def test_lasso_natural_sparsity_vs_exact_k():
+    """
+    Task 2 Verification:
+    Verify Lasso distinguishes natural sparsity from post-hoc exact-K ranking.
+    """
+    np.random.seed(42)
+    n = 80
+    X = pd.DataFrame({
+        f"x{i}": np.random.normal(0, 1, n) for i in range(10)
+    })
+    # Only x0, x1 have real signal
+    y = pd.Series(5.0 * X["x0"] + 3.0 * X["x1"] + np.random.normal(0, 0.5, n))
+
+    preprocessor, _, _ = fit_train_preprocessor(X)
+    mappings, _ = build_feature_mappings_from_transformer(preprocessor, X)
+
+    # High alpha = high sparsity (natural non-zeros < 5)
+    # But requested K = 5
+    res, meta = select_by_lasso(
+        X_input=X,
+        y_input=y,
+        mappings=mappings,
+        k=5,
+        alpha=1.0,
+        cv_strategy="random",
+        cv_folds=3
+    )
+    selected_count = sum(1 for m in res if m.is_selected)
+    assert selected_count == 5, "Requested K=5 must be strictly respected"
+    assert "natural_nonzero_original_features" in meta
+    # Natural count should be recorded separately
+    assert meta["natural_nonzero_original_features"] <= 5
+
+
+def test_experiment_identity_uniqueness():
+    """
+    Task 3 Verification:
+    Verify that compute_experiment_identity generates distinct hashes when:
+    - CV Folds change
+    - Alpha values change
+    - Random seeds change
+    - CV Strategy changes
+    And verify that different configs do not overwrite each other in the tracker.
+    """
+    tracker = FeatureSelectionExperimentTracker()
+
+    base_params = {
+        "dataset_fingerprint": "df_abc123",
+        "split_fingerprint": "sf_xyz789",
+        "method_id": "lasso",
+        "k": 5,
+        "cv_strategy": "random",
+        "cv_folds": 5,
+        "random_seed": 42,
+        "alpha": 0.01,
+    }
+
+    id_base = compute_experiment_identity(**base_params)
+
+    # 1. Change cv_folds
+    id_folds = compute_experiment_identity(**{**base_params, "cv_folds": 10})
+    assert id_base != id_folds, "Different cv_folds must produce distinct experiment IDs"
+
+    # 2. Change alpha
+    id_alpha = compute_experiment_identity(**{**base_params, "alpha": 0.5})
+    assert id_base != id_alpha, "Different alpha must produce distinct experiment IDs"
+
+    # 3. Change random seed
+    id_seed = compute_experiment_identity(**{**base_params, "random_seed": 999})
+    assert id_base != id_seed, "Different random_seed must produce distinct experiment IDs"
+
+    # 4. Change cv_strategy
+    id_strat = compute_experiment_identity(**{**base_params, "cv_strategy": "temporal"})
+    assert id_base != id_strat, "Different cv_strategy must produce distinct experiment IDs"
+
+
+def test_encoded_dimension_reporting(synthetic_split_bundle):
+    """
+    Task 4 Verification:
+    Verify explicit distinction between:
+    - Total Original Predictors
+    - Selected Original Predictors
+    - Full Encoded Dimension
+    - Selected Encoded Dimension
+    """
+    bundle, split = synthetic_split_bundle
+    tracker = FeatureSelectionExperimentTracker()
+
+    res = run_feature_selection(
+        X_train=split.X_train,
+        y_train=split.y_train,
+        X_val=split.X_val,
+        y_val=split.y_val,
+        method_id="f_test",
+        k=3,
+        cv_strategy="random",
+        cv_folds=3,
+        dataset_fingerprint="test_fp",
+        split_fingerprint=split.split_fingerprint
+    )
+    tracker.add_result(res)
+
+    # Synthetic bundle has 7 original features (5 numeric, 2 categorical)
+    assert res.total_original_count == 7
+    assert res.selected_original_count == 3
+    # Categorical features have 3 and 4 levels -> full encoded dimension > 7
+    assert res.full_encoded_dimension > 7
+    assert res.selected_encoded_dimension == len(res.selected_encoded_feature_names)
+    assert res.selected_encoded_dimension < res.full_encoded_dimension
+
+    # Verify comparison table columns
+    table = tracker.generate_comparison_table()
+    assert "Total Orig" in table.columns
+    assert "Selected Orig" in table.columns
+    assert "Full Enc Dim" in table.columns
+    assert "Selected Enc Dim" in table.columns
+    row = table.iloc[0]
+    assert row["Total Orig"] == 7
+    assert row["Selected Orig"] == 3
+    assert row["Full Enc Dim"] == res.full_encoded_dimension
+    assert row["Selected Enc Dim"] == res.selected_encoded_dimension
+

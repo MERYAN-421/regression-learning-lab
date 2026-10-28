@@ -71,8 +71,10 @@ A fundamental rule in regression modeling is distinguishing between raw dataset 
 * **Wrapper Algorithm**:
   1. Start with an empty selected set $S = \emptyset$.
   2. For each candidate group $g \notin S$:
-     * Fit `LinearRegression` on $S \cup \{g\}$ across $M$-fold cross-validation.
-     * Compute average CV RMSE.
+     * Evaluate candidate subset $S \cup \{g\}$ via **nested, fold-isolated cross-validation** on raw training features.
+     * Fit `SimpleImputer`, `OneHotEncoder`, and `StandardScaler` strictly on each inner fold's training partition.
+     * Evaluate on the inner validation fold using dataset-appropriate splitting (`TimeSeriesSplit`, `GroupKFold`, or `KFold`).
+     * Missing country/group labels are strictly rejected with `ValueError` (no silent fallback).
   3. Greedily select the group yielding the lowest CV RMSE:
      $$g^* = \arg\min_{g \notin S} \text{CV-RMSE}(S \cup \{g\})$$
   4. Add $g^*$ to $S$.
@@ -81,15 +83,42 @@ A fundamental rule in regression modeling is distinguishing between raw dataset 
 ### 3.7 Backward Sequential Feature Selection (`backward_sfs`)
 * **Wrapper Algorithm**:
   1. Start with all original features $S = \{1, 2, \dots, P\}$.
-  2. At each step, evaluate removing each candidate group $g \in S$.
-  3. Greedily eliminate the group whose removal produces the best (lowest) CV RMSE:
+  2. At each step, evaluate candidate subsets $S \setminus \{g\}$ via nested inner-fold cross-validation with fold-specific preprocessing.
+  3. Greedily eliminate the group whose removal produces the lowest CV RMSE:
      $$g^* = \arg\min_{g \in S} \text{CV-RMSE}(S \setminus \{g\})$$
   4. Repeat until $|S| = K$.
 
 ### 3.8 Lasso-Based Selection (`lasso`)
 * **Embedded Regularization**: Minimizes the $L_1$-penalized least squares objective:
   $$\min_{\boldsymbol{\beta}} \frac{1}{2N} \|\mathbf{y} - \mathbf{X}\boldsymbol{\beta}\|_2^2 + \alpha \sum_{j=1}^D |\beta_j|$$
-* **Group Evaluation**: Group importance is evaluated via group coefficient magnitude:
+* **Dataset-Appropriate Hyperparameter Selection**:
+  * Evaluates candidate $\alpha \in [10^{-4}, 10.0]$ across dataset-appropriate cross-validation (`TimeSeriesSplit`, `GroupKFold`, or `KFold`).
+  * Preprocessing (imputation, scaling, one-hot encoding) is fitted strictly per inner fold.
+  * Deterministic execution via fixed `random_seed`.
+* **Group Evaluation**: Group importance is evaluated via Euclidean magnitude of group coefficients:
   $$S_g = \sqrt{\sum_{j \in g} \hat{\beta}_j^2}$$
-* **Natural Sparsity vs. Exact-K Limitation**:
-  > **Pedagogical Note**: Ordinary Lasso induces coefficient-level sparsity naturally via $\alpha$; it does not natively enforce an exact group count $K$. The lab estimates optimal $\alpha$ via internal 3-fold cross-validation, records the natural non-zero group count, and provides top-$K$ group selection as a documented post-hoc ranking. The UI explicitly alerts users to this distinction.
+* **Natural Sparsity vs. Exact-K Distinction**:
+  > **Pedagogical Note**: Lasso induces natural coefficient-level sparsity at optimal $\alpha$. If the natural count of non-zero original groups differs from the user's requested $K$, top-$K$ groups are ranked post-hoc by group coefficient magnitude. The natural non-zero count is explicitly reported in the result metadata and UI.
+
+---
+
+## 4. Empirical Cross-Method Benchmark (Student Performance)
+
+Below is the verified cross-method comparison table on the Student Performance dataset ($P=32$ original predictors, $D_{\text{full}}=58$ encoded dimensions, $K=15$, 3-fold isolated CV):
+
+| Method | Category | Req K | Total Orig | Sel Orig | Full Enc Dim | Sel Enc Dim | CV RMSE | Val RMSE | Val R² | Runtime (s) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **All Features (Baseline)** | Baseline | 32 | 32 | 32 | 58 | 58 | 2.169 ± 0.239 | 2.213 | 0.8097 | 0.16s |
+| **Pearson Correlation** | Filter | 15 | 32 | 15 | 58 | 26 | 2.041 ± 0.261 | 2.289 | 0.7965 | 0.22s |
+| **F-Test (`f_regression`)** | Filter | 15 | 32 | 15 | 58 | 26 | 2.041 ± 0.261 | 2.289 | 0.7965 | 0.15s |
+| **Mutual Information** | Filter | 15 | 32 | 15 | 58 | 31 | 2.048 ± 0.174 | 2.242 | 0.8048 | 0.65s |
+| **Recursive Feature Elimination (RFE)** | Wrapper | 15 | 32 | 15 | 58 | 31 | 2.138 ± 0.264 | 2.257 | 0.8021 | 0.27s |
+| **Forward SFS** | Wrapper | 15 | 32 | 15 | 58 | 23 | 1.986 ± 0.219 | 2.234 | 0.8062 | 85.28s |
+| **Backward SFS** | Wrapper | 15 | 32 | 15 | 58 | 22 | 1.957 ± 0.233 | 2.238 | 0.8054 | 138.27s |
+| **Lasso Selection** | Embedded | 15 | 32 | 15 | 58 | 28 | 1.979 ± 0.180 | 2.154 | 0.8198 | 0.95s |
+
+### Key Observations & Revised Comparison Insights
+1. **Lasso Selection Achieves Lowest Validation RMSE (2.154)**: By balancing $L_1$ shrinkage and group ranking, Lasso regularizes multicollinear academic covariates and achieves the highest generalization $R^2 = 0.8198$.
+2. **Honest Nested CV for SFS**: Under strict inner-fold preprocessing and evaluation isolation, Forward SFS CV RMSE is `1.986 ± 0.219` (reflecting genuine unseen inner-validation performance without optimistic data leakage).
+3. **Dimension Reporting**: Clearly separates original predictors ($K=15$ out of $32$) from expanded dummy dimensions ($D_{\text{selected}} \in [22, 31]$ out of $58$), ensuring transparent reproducibility.
+

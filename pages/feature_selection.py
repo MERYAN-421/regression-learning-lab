@@ -247,11 +247,11 @@ if active_result is not None:
     # SECTION D: Selected Features Inspection
     # ---------------------------------------------------------
     st.divider()
-    st.header(f"4. Selected Predictor Features ({active_result.selected_original_count} / {len(active_result.all_original_features)})")
+    st.header(f"4. Selected Predictor Features ({active_result.selected_original_count} / {active_result.total_original_count})")
 
     sf1, sf2, sf3, sf4 = st.columns(4)
-    sf1.metric("Selected Original Features", f"{active_result.selected_original_count}")
-    sf2.metric("Encoded Model Dimensions", f"{len(active_result.selected_encoded_feature_names)}")
+    sf1.metric("Selected Original Features", f"{active_result.selected_original_count} / {active_result.total_original_count}")
+    sf2.metric("Selected Encoded Dimension", f"{active_result.selected_encoded_dimension} / {active_result.full_encoded_dimension}")
     sf3.metric("Validation RMSE", f"{active_result.val_rmse:.3f}")
     sf4.metric("Validation R²", f"{active_result.val_r2:.3f}")
 

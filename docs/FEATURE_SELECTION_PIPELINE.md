@@ -90,14 +90,14 @@ A temporary `LinearRegression` model is used solely to evaluate feature subsets:
 
 ---
 
-## 4. Experiment Result Architecture
+## 4. Experiment Result Architecture & Dimension Hierarchy
 
-Each completed experiment is encapsulated in a `FeatureSelectionResult` dataclass:
+Each completed experiment is encapsulated in a `FeatureSelectionResult` dataclass with explicit four-tier dimension tracking:
 
 ```python
 @dataclass
 class FeatureSelectionResult:
-    experiment_id: str
+    experiment_id: str                      # Stable SHA-256 hash of complete config
     dataset_id: str
     dataset_fingerprint: str
     split_fingerprint: str
@@ -105,13 +105,19 @@ class FeatureSelectionResult:
     method_name: str
     category: str
     requested_k: int
+
+    # Four-Tier Dimension Hierarchy:
+    total_original_count: int               # Total original predictors in dataset (P)
+    selected_original_count: int            # Selected original predictors (K)
+    full_encoded_dimension: int             # Full one-hot encoded matrix dimension (D_full)
+    selected_encoded_dimension: int         # Active regression model input columns (D_sel)
+
     selected_original_features: List[str]
-    selected_original_count: int
     all_original_features: List[str]
     encoded_feature_names: List[str]
     selected_encoded_feature_names: List[str]
-    encoded_input_dimension: int
     feature_mappings: List[OriginalFeatureMapping]
+
     cv_rmse_mean: float
     cv_rmse_std: float
     val_mse: float
@@ -125,5 +131,17 @@ class FeatureSelectionResult:
     notes: str
 ```
 
-### Stale State Invalidation
+### 4.1 Structural Feature Mapping
+Feature grouping is implemented via **structural introspection** of fitted scikit-learn transformers (`preprocessor.output_indices_`, `transformers_`, and `OneHotEncoder.categories_`). It guarantees 100% collision immunity even when:
+* Feature names share common substrings/prefixes (`feat` vs `feat_2`, `cat` vs `cat_type`).
+* Categorical levels contain underscores (`level_1`, `val_x`).
+* Datasets combine mixed continuous and multi-level categorical predictors.
+
+### 4.2 Cryptographic SHA-256 Experiment Identity
+To guarantee collision-free tracking across varying configurations, experiment IDs are generated as:
+$$\text{ID} = \text{SHA256}(\text{DatasetFP} \,\|\, \text{SplitFP} \,\|\, \text{Method} \,\|\, K \,\|\, \text{CVStrategy} \,\|\, \text{CVFolds} \,\|\, \text{Seed} \,\|\, \alpha)[:12]$$
+Runs with different CV folds, alpha penalties, or random seeds receive distinct hashes and never overwrite one another in the experiment tracker.
+
+### 4.3 Stale State Invalidation
 The `FeatureSelectionExperimentTracker` associates every run with the active `dataset_fingerprint` and `split_fingerprint`. If a user modifies split ratios, changes random seed, or switches datasets in `pages/dataset.py`, previous experiments are flagged as outdated, preventing cross-contamination.
+
