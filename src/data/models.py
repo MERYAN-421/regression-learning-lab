@@ -97,7 +97,14 @@ class SplitResult:
     strategy: str
     random_seed: Optional[int]
     temporal_bounds: Optional[Dict[str, Tuple[Any, Any]]] = None
-    group_summary: Optional[Dict[str, List[Any]]] = None
+    group_summary: Optional[Dict[str, Any]] = None
+    groups_train: Optional[pd.Series] = None
+    groups_val: Optional[pd.Series] = None
+    groups_test: Optional[pd.Series] = None
+    timestamps_train: Optional[pd.Series] = None
+    timestamps_val: Optional[pd.Series] = None
+    timestamps_test: Optional[pd.Series] = None
+    split_fingerprint: str = ""
     warnings: List[str] = field(default_factory=list)
 
 

@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from typing import Tuple
 from streamlit.testing.v1 import AppTest
 
 from src.data import (

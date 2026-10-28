@@ -128,6 +128,31 @@ def split_dataset(
         "test": len(X_test) / n_eligible
     }
 
+    # Extract group labels if group column exists in raw_df
+    grp_col = config.group_column or metadata.group_column
+    groups_train = None
+    groups_val = None
+    groups_test = None
+    if raw_df is not None and grp_col and grp_col in raw_df.columns:
+        groups_train = raw_df[grp_col].iloc[final_train_idx].reset_index(drop=True)
+        groups_val = raw_df[grp_col].iloc[final_val_idx].reset_index(drop=True)
+        groups_test = raw_df[grp_col].iloc[final_test_idx].reset_index(drop=True)
+
+    # Extract timestamp labels if date column exists in raw_df
+    date_col = config.date_column or metadata.date_column
+    timestamps_train = None
+    timestamps_val = None
+    timestamps_test = None
+    if raw_df is not None and date_col and date_col in raw_df.columns:
+        timestamps_train = raw_df[date_col].iloc[final_train_idx].reset_index(drop=True)
+        timestamps_val = raw_df[date_col].iloc[final_val_idx].reset_index(drop=True)
+        timestamps_test = raw_df[date_col].iloc[final_test_idx].reset_index(drop=True)
+
+    # Compute deterministic split fingerprint
+    import hashlib
+    fp_raw = f"{metadata.id}_{strat.value}_{config.train_ratio}_{config.val_ratio}_{config.test_ratio}_{config.random_seed}_{len(final_train_idx)}"
+    split_fp = hashlib.sha256(fp_raw.encode()).hexdigest()[:16]
+
     return SplitResult(
         X_train=X_train,
         X_val=X_val,
@@ -144,6 +169,13 @@ def split_dataset(
         random_seed=config.random_seed if strat != SplitStrategy.TEMPORAL else None,
         temporal_bounds=temp_bounds,
         group_summary=grp_summary,
+        groups_train=groups_train,
+        groups_val=groups_val,
+        groups_test=groups_test,
+        timestamps_train=timestamps_train,
+        timestamps_val=timestamps_val,
+        timestamps_test=timestamps_test,
+        split_fingerprint=split_fp,
         warnings=warnings
     )
 

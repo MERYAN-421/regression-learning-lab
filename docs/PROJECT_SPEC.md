@@ -102,8 +102,8 @@ Regression Learning Lab (app.py)
 | :--- | :--- | :--- | :--- |
 | **Milestone 0** | **Project Foundation** | Environment setup, project architecture, 9-page skeleton, UI/UX design, documentation, testing, and Git/GitHub setup | ✅ **Completed** |
 | **Milestone 1** | **Dataset & Preprocessing** | Kaggle regression dataset pipeline (14–39 features), data validation, caching, and partitioning (Random, Temporal, Group) | ✅ **Completed** |
-| **Milestone 2** | **EDA & Feature Selection** | Univariate/bivariate visualizer, correlation heatmaps, VIF, Filter, Wrapper, and Lasso feature selection | ⏳ Next Up |
-| **Milestone 3** | **Regression & Evaluation** | statsmodels OLS integration, summary tables, LaTeX equation generator, MSE/RMSE/R² metrics | ⏳ Scheduled |
+| **Milestone 2** | **EDA & Feature Selection** | Interactive EDA lab (distributions, Pearson/Spearman, outliers), 8 group-aware selection methods (Baseline, Filter, Wrapper, Lasso), leakage-free CV, experiment comparison | ✅ **Completed** |
+| **Milestone 3** | **Regression & Evaluation** | statsmodels OLS integration, summary tables, LaTeX equation generator, MSE/RMSE/R² metrics | ⏳ Next Up |
 | **Milestone 4** | **Assumption Diagnostics** | Five Gauss-Markov diagnostic tests and visual plots, Cook's distance, leverage diagnostics | ⏳ Scheduled |
 | **Milestone 5** | **Comparison & Reporting** | Experiment tracking, side-by-side radar charts, automated laboratory report generator | ⏳ Scheduled |
 
