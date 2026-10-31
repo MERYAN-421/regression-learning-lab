@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-FF4B4B.svg?style=flat&logo=Streamlit&logoColor=white)](https://streamlit.io/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Milestone-3%20Completed-success.svg)]()
+[![Status](https://img.shields.io/badge/Milestone-4%20Completed-success.svg)]()
 
 > **Interactive Multiple Linear Regression & Statistical Diagnostics Platform**  
 > An educational web platform designed for data science and statistics students to explore real-world regression modeling, feature selection, and the classical Gauss-Markov assumptions using curated Kaggle tabular datasets (14–39 features).
@@ -44,12 +44,14 @@
   - **Interactive Descriptive Visualizations**: Actual vs. Predicted scatter plot with $45^\circ$ line, Residuals vs. Fitted plot, and Residual Distribution histogram with normal curve overlay.
   - **Model Comparison Leaderboard**: Multi-model comparison across feature selection approaches under identical split partitions.
   - **Controlled Final Test Evaluation**: Strict test set isolation during development; explicit authorization workflow with documented Train+Val refit or Train-only policy.
-- **Five Classical Gauss-Markov Diagnostics (Milestone 4)**:
-  1. *Linearity* (Ramsey RESET & Residuals vs. Fitted)
-  2. *Independence* (Durbin-Watson, Ljung-Box & ACF)
-  3. *Homoscedasticity* (Breusch-Pagan, White's Test & Scale-Location)
-  4. *Normality* (Jarque-Bera, Shapiro-Wilk & Normal Q-Q Plot)
-  5. *Multicollinearity* (Variance Inflation Factor & Matrix Condition Number)
+- **Statistical Assumption Diagnostics Laboratory (Milestone 4)**:
+  - **Linearity & Functional Form**: Ramsey RESET test with configurable powers ($F$-statistic, degrees of freedom, $p$-value) and Residuals vs. Fitted plot with LOWESS non-parametric smoothing curve.
+  - **Independence & Autocorrelation**: Durbin-Watson statistic, Ljung-Box portmanteau test, and Autocorrelation Function (ACF) plot with Bartlett 95% confidence bands; enforces dataset-specific applicability (temporal ordering for Appliances Energy vs. panel/cross-sectional non-applicability).
+  - **Homoscedasticity**: Breusch-Pagan test (LM and $F$-statistics), optional White's test, and Scale-Location diagnostic plot ($\sqrt{|\text{standardized residuals}|}$ vs. fitted values).
+  - **Normality of Residuals**: Jarque-Bera test (skewness and kurtosis), optional Shapiro-Wilk test, Normal Q-Q plot against theoretical Gaussian quantiles, and Residual Distribution histogram with normal density curve; explicitly clarifies that BLUE does not require normality.
+  - **Multicollinearity**: Variance Inflation Factor (VIF) on non-intercept regressors with auxiliary intercept, Matrix Condition Number, and QR rank diagnostics with King County structural identity demonstration.
+  - **Exogeneity Educational Notice**: Transparently cautions students that strict exogeneity $E[\epsilon | X] = 0$ cannot be proven by residual diagnostics.
+  - **Influence & Leverage Diagnostics**: Cook's Distance ($4/n$) and Hat Matrix Leverage ($2(p+1)/n$).
 
 ---
 

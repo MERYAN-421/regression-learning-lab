@@ -110,3 +110,21 @@ Milestone 3 seamlessly ingests the output of Milestone 2:
 3. **Statistical Inference Notice**:
    Whenever a model is trained using a feature-selected subset, the educational notice is automatically attached to coefficient tables:
    > *"Coefficient tests and confidence intervals are conventional OLS results conditional on the selected model. They do not automatically adjust for data-driven feature selection."*
+
+---
+
+## 5. Handoff to Milestone 4: Statistical Assumption Diagnostics Laboratory
+
+Fitted `OLSModelResult` instances seamlessly hand off to the Milestone 4 Diagnostics Engine (`src/diagnostics/`):
+
+1. **Active Model Validation**:
+   - `validate_active_model_for_diagnostics()` strictly compares model `dataset_id`, `dataset_fingerprint`, and `split_fingerprint` against the active session state.
+   - Any stale or partition-mismatched model is blocked from executing diagnostic tests.
+2. **Training-Only Scope & Leakage Protection**:
+   - Diagnostic tests (Ramsey RESET, Durbin-Watson, Ljung-Box, Breusch-Pagan, Jarque-Bera, VIF) operate exclusively on training residuals and design matrix $X_{\text{train}}$.
+   - Test labels and test residuals are never accessed or leaked during assumption evaluation.
+3. **Prediction-Only vs. Inferential Guard**:
+   - Models flagged as `prediction_only` (e.g. rank-deficient or singular matrices) restrict inferential hypothesis tests to exploratory / descriptive modes with educational explanations.
+4. **Structured Artifacts**:
+   - Each diagnostic produces an immutable `DiagnosticResult` record, assembled into a `DiagnosticSuiteResult` tracking full reproducibility metadata.
+   - See [ASSUMPTION_DIAGNOSTICS.md](file:///d:/碩一/down_temp/classification/docs/ASSUMPTION_DIAGNOSTICS.md) and [DIAGNOSTIC_PIPELINE.md](file:///d:/碩一/down_temp/classification/docs/DIAGNOSTIC_PIPELINE.md) for full econometric details.
