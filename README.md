@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-FF4B4B.svg?style=flat&logo=Streamlit&logoColor=white)](https://streamlit.io/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Milestone-2%20Completed-success.svg)]()
+[![Status](https://img.shields.io/badge/Milestone-3%20Completed-success.svg)]()
 
 > **Interactive Multiple Linear Regression & Statistical Diagnostics Platform**  
 > An educational web platform designed for data science and statistics students to explore real-world regression modeling, feature selection, and the classical Gauss-Markov assumptions using curated Kaggle tabular datasets (14–39 features).
@@ -26,14 +26,24 @@
   - Univariate distribution metrics (mean, std, median, skewness, kurtosis, IQR outlier flags).
   - Pearson & Spearman correlation heatmaps with constant feature exclusion.
   - Bivariate scatter plots with OLS trendlines and categorical target box plots.
-- **Feature Selection Laboratory (Milestone 2 Review Fixes Verified)**:
+- **Feature Selection Laboratory (Milestone 2)**:
   - 8 selection methods: Baseline, Pearson, F-test, Mutual Information, RFE, Forward SFS, Backward SFS, and Lasso.
   - **Structural Feature Mapping**: Introspects fitted transformer metadata, preventing prefix/substring collisions and handling underscores in category levels.
-  - **Nested SFS Fold Isolation**: Imputer, encoder, and scaler fitted strictly per inner fold; dataset-appropriate splitting (`TimeSeriesSplit`, `GroupKFold`, `KFold`); rejects missing country labels with `ValueError`.
+  - **Nested SFS Fold Isolation**: Imputer, encoder, and scaler fitted strictly per inner fold; dataset-appropriate splitting (`TimeSeriesSplit`, `GroupKFold`, `KFold`).
   - **Dataset-Appropriate Lasso**: Hyperparameter selection with fold-specific preprocessing, deterministic execution, and natural sparsity vs. exact-$K$ ranking distinction.
   - **Stable Experiment Identity**: 12-char SHA-256 hash incorporating all configuration parameters, ensuring distinct CV settings or alphas never collide.
-  - **Explicit Dimension Hierarchy**: Clear distinction of Total Original Predictors ($P$), Selected Original Predictors ($K$), Full Encoded Dimension ($D_{\text{full}}$), and Selected Encoded Dimension ($D_{\text{sel}}$).
-  - Side-by-side comparison tables, selection overlap matrices, and interactive Plotly charts.
+- **Regression Modeling Laboratory (Milestone 3)**:
+  - **OLS Design Matrix Contract**: Median imputation fitted on Train only, reference-category dummy encoding (`drop='first'`) to prevent dummy-variable trap, and single explicit constant.
+  - **Matrix Rank & Near-Singularity Diagnostics**: Detects rank deficiency, collinear columns via QR decomposition with column pivoting, and flags high condition numbers (e.g. King County House Sales structural identity $\text{sqft\_living} \approx \text{sqft\_above} + \text{sqft\_basement}$).
+  - **Econometric Parameter Estimation**: statsmodels OLS parameter estimation, standard errors, $t$-statistics, $p$-values, 95% confidence intervals, and $F$-tests.
+  - **LaTeX Equation Rendering**: Interactive mathematical equation displays with actual fitted coefficients.
+  - **Post-Selection Inference Caveat**: Transparently warns students when statistical inference follows data-driven feature selection.
+- **Model Evaluation Laboratory (Milestone 3)**:
+  - **Quantitative Metrics**: MSE, RMSE, MAE, $R^2$, and in-sample Adjusted $R^2$ (labeled distinctly from validation metrics).
+  - **Generalization Gap**: Directly compares Training and Validation RMSE to quantify potential overfitting.
+  - **Interactive Descriptive Visualizations**: Actual vs. Predicted scatter plot with $45^\circ$ line, Residuals vs. Fitted plot, and Residual Distribution histogram with normal curve overlay.
+  - **Model Comparison Leaderboard**: Multi-model comparison across feature selection approaches under identical split partitions.
+  - **Controlled Final Test Evaluation**: Strict test set isolation during development; explicit authorization workflow with documented Train+Val refit or Train-only policy.
 - **Five Classical Gauss-Markov Diagnostics (Milestone 4)**:
   1. *Linearity* (Ramsey RESET & Residuals vs. Fitted)
   2. *Independence* (Durbin-Watson, Ljung-Box & ACF)
@@ -96,19 +106,33 @@ regression-learning-lab/
 │   │   ├── evaluation.py      # Isolated CV (TimeSeriesSplit, GroupKFold, KFold)
 │   │   ├── selectors.py       # Unified dispatch facade & method registry
 │   │   └── result_models.py   # FeatureSelectionResult & OriginalFeatureMapping
-│   ├── experiments/           # Experiment tracker, stale state purger & overlap matrices
+│   ├── models/                # Milestone 3 OLS Modeling Engine
+│   │   ├── design_matrix.py   # OLS design matrix builder, reference encoding & rank diagnostics
+│   │   ├── ols_model.py       # statsmodels OLS fitting & LaTeX equation formulations
+│   │   ├── model_result.py    # OLSModelResult data contract
+│   │   └── model_service.py   # High-level training orchestrator
+│   ├── evaluation/            # Milestone 3 Evaluation & Plotting Engine
+│   │   ├── regression_metrics.py # MSE, RMSE, MAE, R², Train Adj R²
+│   │   ├── predictions.py     # OLS inference & out-of-sample prediction
+│   │   ├── plots.py           # Actual vs Pred, Residuals vs Fitted & Distribution histogram
+│   │   └── comparison.py      # Cross-model leaderboard builder
+│   ├── experiments/           # Experiment tracker, stale state purger & regression tracker
 │   └── utils/                 # Path helpers & YAML configuration loaders
 │
 ├── configs/                   # Declarative system & dataset configurations
 │   ├── app_config.yaml        # Application parameters & milestone definitions
 │   └── datasets.yaml          # Single source of truth for dataset metadata
 │
-├── tests/                     # Automated test suites (92 tests passing)
+├── tests/                     # Automated test suites (118 tests passing)
 │   ├── test_structure.py      # Milestone 0 architecture, navigation & doc tests
 │   ├── test_dataset_engine.py # Milestone 1 Registry, Loader, Splitter & Leakage tests
 │   ├── test_eda.py            # Milestone 2 EDA distribution, correlation & plot tests
-│   ├── test_feature_selection.py # Milestone 2 Preprocessing, 8 selectors, structural mapping & CV leakage tests
-│   └── test_integration_datasets.py # Milestone 2 Real-dataset verification tests
+│   ├── test_feature_selection.py # Milestone 2 Preprocessing, 8 selectors & CV tests
+│   ├── test_integration_datasets.py # Milestone 2 Real-dataset verification tests
+│   ├── test_ols_design_matrix.py # Milestone 3 Design matrix, reference encoding & rank tests
+│   ├── test_regression_modeling.py # Milestone 3 OLS estimation, inference & LaTeX equation tests
+│   ├── test_regression_evaluation.py # Milestone 3 MSE, RMSE, MAE, R² & Adj R² metric tests
+│   └── test_regression_integration.py # Milestone 3 Real-dataset integration & controlled Test tests
 │
 └── docs/                      # Technical specifications & statistical references
     ├── PROJECT_SPEC.md        # Comprehensive system specification & milestone status
@@ -117,6 +141,9 @@ regression-learning-lab/
     ├── EDA_METHODS.md         # EDA formulas, skewness, kurtosis, Pearson vs Spearman
     ├── FEATURE_SELECTION_METHODS.md # Specifications for all 8 selection algorithms & empirical table
     ├── FEATURE_SELECTION_PIPELINE.md# Pipeline, structural mapping, fold isolation & dimension hierarchy
+    ├── OLS_REGRESSION_METHODS.md # Milestone 3 OLS mathematics, reference encoding & rank conditions
+    ├── MODEL_EVALUATION_METHODS.md # Milestone 3 Metrics, generalization gap & descriptive residual plots
+    ├── MODELING_PIPELINE.md   # Milestone 3 Modeling architecture, data contracts & test isolation
     └── STATISTICAL_METHODS.md # Mathematical definitions, hypotheses & decision thresholds
 ```
 
