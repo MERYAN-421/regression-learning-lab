@@ -133,3 +133,30 @@ def test_diagnostic_specific_configuration_preserved(diagnostics_comparison_fixt
     assert "RESET Config" in row
     assert "powers=" in row["RESET Config"]
     assert "Ljung-Box Config" in row
+
+
+def test_diagnostic_configuration_differences_detected(diagnostics_comparison_fixture):
+    """
+    Task 2: When compared DiagnosticSuiteResults differ in alpha, RESET powers,
+    or Ljung-Box lag configuration, visibly identify those differences.
+    """
+    split, m1, m2, suite_m1 = diagnostics_comparison_fixture
+    # Create second suite with differing alpha (0.01 vs 0.05)
+    suite_m2 = run_full_diagnostic_suite(m2, split_result=split, alpha=0.01)
+
+    from src.comparison.diagnostics_matrix import check_diagnostic_configuration_differences
+    notices = check_diagnostic_configuration_differences({
+        m1.model_id: suite_m1,
+        m2.model_id: suite_m2
+    })
+    assert len(notices) > 0
+    assert any("Significance Level Mismatch" in n for n in notices)
+
+    # Matrix should flag differing test configurations
+    matrix = build_diagnostic_comparison_matrix(
+        models=[m1, m2],
+        diagnostic_suites={m1.model_id: suite_m1, m2.model_id: suite_m2}
+    )
+    assert matrix[0]["Config Status"] == "⚠️ Differing Test Configs"
+    assert matrix[1]["Config Status"] == "⚠️ Differing Test Configs"
+

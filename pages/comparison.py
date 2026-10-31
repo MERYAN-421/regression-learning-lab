@@ -36,6 +36,7 @@ from src.comparison.radar import create_radar_chart
 from src.comparison.pareto import compute_pareto_frontier, create_pareto_scatter_chart
 from src.comparison.diagnostics_matrix import (
     build_diagnostic_comparison_matrix,
+    check_diagnostic_configuration_differences,
     DIAGNOSTIC_COMPARISON_NOTES
 )
 from src.comparison.feature_overlap import (
@@ -387,16 +388,14 @@ if multi_suite_models:
             )
             active_diag_map[m.model_id] = next(s for s in avail if s.suite_id == chosen_sid)
 
-# Check for differing significance levels across active suites
-selected_alphas = {
-    s.alpha for m_id, s in active_diag_map.items()
-    if m_id in [m.model_id for m in selected_models]
-}
-if len(selected_alphas) > 1:
+# Check for differing test configurations across active suites (Task 2)
+config_diff_notices = check_diagnostic_configuration_differences(active_diag_map)
+if config_diff_notices:
     st.warning(
-        f"⚠️ **Differing Significance Levels Detected**: Selected diagnostic suites use distinct alpha levels "
-        f"({', '.join(f'α={a:.2f}' for a in sorted(list(selected_alphas)))}). "
-        "Reject / Fail-to-Reject decisions cannot be interpreted as directly equivalent test thresholds."
+        "⚠️ **Diagnostic Specification Differences Detected**:\n" +
+        "\n".join(f"- {n}" for n in config_diff_notices) +
+        "\n\n*Econometric Note*: Mismatched test configurations (differing significance levels, polynomial powers, or lag orders) "
+        "do not represent equivalent statistical evidence. Review configuration columns individually without conflation."
     )
 
 diag_matrix_rows = build_diagnostic_comparison_matrix(selected_models, diagnostic_suites=active_diag_map)

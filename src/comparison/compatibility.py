@@ -95,14 +95,26 @@ def validate_model_compatibility(
                 f"expected '{expected_target_name}'."
             )
 
-        # 5. Target Measurement Unit (Task 1: reject mismatch as incompatible)
+        # 5. Target Measurement Unit (Task 3: Known vs. unknown unit handling)
         m_unit = getattr(m, "target_unit", None)
-        if expected_target_unit is not None and m_unit is not None:
-            if m_unit != expected_target_unit:
-                reasons.append(
-                    f"Target measurement unit mismatch: Model '{m_id}' uses '{m_unit}', "
-                    f"expected '{expected_target_unit}'. Models measuring different physical units cannot be compared."
-                )
+        m_unit_clean = m_unit.strip() if isinstance(m_unit, str) and m_unit.strip() else None
+        expected_unit_clean = expected_target_unit.strip() if isinstance(expected_target_unit, str) and expected_target_unit.strip() else None
+
+        if expected_unit_clean is not None and m_unit_clean is None:
+            reasons.append(
+                f"Target measurement unit incompatibility: Model '{m_id}' has an unknown/missing target unit, "
+                f"while expected target unit is '{expected_unit_clean}'. Known units cannot be compared with unknown units without an explicit compatible-unit policy."
+            )
+        elif expected_unit_clean is None and m_unit_clean is not None:
+            reasons.append(
+                f"Target measurement unit incompatibility: Model '{m_id}' specifies target unit '{m_unit_clean}', "
+                "while expected target unit is unknown. Known units cannot be compared with unknown units without an explicit compatible-unit policy."
+            )
+        elif expected_unit_clean is not None and m_unit_clean is not None and m_unit_clean != expected_unit_clean:
+            reasons.append(
+                f"Target measurement unit mismatch: Model '{m_id}' uses '{m_unit_clean}', "
+                f"expected '{expected_unit_clean}'. Models measuring different physical units cannot be compared."
+            )
 
         # 6. Observation Counts (Evaluation scope)
         m_train_n = len(m.train_predictions) if m.train_predictions is not None else m.train_metrics.sample_count

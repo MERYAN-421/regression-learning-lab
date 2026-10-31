@@ -49,6 +49,60 @@ def validate_suite_compatibility(
     return (len(issues) == 0, issues)
 
 
+def check_diagnostic_configuration_differences(
+    diagnostic_suites: Optional[Dict[str, DiagnosticSuiteResult]]
+) -> List[str]:
+    """
+    Inspects diagnostic suites across compared models to detect and flag
+    mismatched hypothesis test configurations (differing alpha, RESET powers, or Ljung-Box lags).
+    Ensures mismatched tests are visibly identified and not conflated as equivalent statistical evidence.
+    """
+    if not diagnostic_suites:
+        return []
+
+    suites = [s for s in diagnostic_suites.values() if s is not None]
+    if len(suites) <= 1:
+        return []
+
+    notices = []
+
+    # 1. Check alpha thresholds
+    alphas = {round(s.alpha, 4) for s in suites}
+    if len(alphas) > 1:
+        notices.append(
+            f"Significance Level Mismatch: Diagnostic suites evaluate different alpha thresholds "
+            f"({sorted(list(alphas))}). Hypothesis test rejection decisions use unequal evidentiary standards."
+        )
+
+    # 2. Check Ramsey RESET powers
+    reset_powers = set()
+    for s in suites:
+        diag = s.diagnostics.get("ramsey_reset")
+        if diag and diag.configuration:
+            powers = diag.configuration.get("powers", [2, 3])
+            reset_powers.add(tuple(sorted(powers)))
+    if len(reset_powers) > 1:
+        notices.append(
+            f"Ramsey RESET Specification Mismatch: Candidate models evaluate different polynomial power sets "
+            f"({[list(p) for p in sorted(list(reset_powers))]}). Test statistics evaluate different functional alternative hypotheses."
+        )
+
+    # 3. Check Ljung-Box lags
+    lb_lags = set()
+    for s in suites:
+        diag = s.diagnostics.get("ljung_box")
+        if diag and diag.configuration:
+            lags = diag.configuration.get("lags", 10)
+            lb_lags.add(lags)
+    if len(lb_lags) > 1:
+        notices.append(
+            f"Ljung-Box Lag Mismatch: Candidate models evaluate different autocorrelation lag orders "
+            f"({sorted(list(lb_lags))}). Q-statistics and degrees of freedom are not directly comparable."
+        )
+
+    return notices
+
+
 def build_diagnostic_comparison_matrix(
     models: List[OLSModelResult],
     diagnostic_suites: Optional[Dict[str, DiagnosticSuiteResult]] = None
@@ -61,12 +115,14 @@ def build_diagnostic_comparison_matrix(
     1. Validation of suite identity, dataset fingerprint, and split fingerprint against each candidate model.
     2. Explicit marking of 'Not Run' or 'Incompatible Suite' rather than treating missing suites as favorable.
     3. Disclosure of alpha and diagnostic-specific parameters (e.g. RESET powers, Ljung-Box lags).
-    4. Rule 3: Zero composite scoring, pass counts, or p-value ranking.
+    4. Visible identification of differing test configurations across candidate models.
+    5. Rule 3: Zero composite scoring, pass counts, or p-value ranking.
     """
     if not models:
         return []
 
     suites_dict = diagnostic_suites or {}
+    config_diff_notices = check_diagnostic_configuration_differences(suites_dict)
     matrix_rows: List[Dict[str, Any]] = []
 
     for m in models:
@@ -81,7 +137,8 @@ def build_diagnostic_comparison_matrix(
             "Inference Status": "Full Rank" if m.is_valid_for_inference else "Prediction Only",
             "Suite ID": suite.suite_id if suite else "Not Run",
             "Suite Alpha": f"{suite.alpha:.2f}" if suite else "N/A",
-            "Suite Compatibility": "Valid" if suite else "Not Available"
+            "Suite Compatibility": "Valid" if suite else "Not Available",
+            "Config Status": "⚠️ Differing Test Configs" if (config_diff_notices and suite) else "Consistent"
         }
 
         # Methods to inspect

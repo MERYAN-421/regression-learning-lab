@@ -207,3 +207,23 @@ def test_intercept_difference_documents_aic_bic_limitation(synthetic_split_and_m
     )
     assert res.is_compatible is True
     assert any("AIC/BIC" in w for w in res.warnings)
+
+
+def test_known_target_unit_vs_unknown_target_unit_rejected(synthetic_split_and_models):
+    """
+    Task 3: Ensures that known units cannot be compared with unknown units
+    without an explicit compatible-unit policy.
+    """
+    split, m1, m2 = synthetic_split_and_models
+    m1.target_unit = "USD"
+    m2.target_unit = None  # Unknown / missing unit
+    res = validate_model_compatibility(
+        models=[m1, m2],
+        active_dataset_id="test_ds",
+        active_dataset_fingerprint="ds_fp_abcde",
+        active_split_fingerprint="split_fp_12345",
+        active_target_name="target_y"
+    )
+    assert res.is_compatible is False
+    assert any("Target measurement unit incompatibility" in r for r in res.reasons)
+

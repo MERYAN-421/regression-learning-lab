@@ -19,7 +19,11 @@ from src.comparison.compatibility import validate_model_compatibility
 from src.comparison.leaderboard import build_comparison_leaderboard
 from src.comparison.normalization import compute_radar_scores, RADAR_DIMENSIONS
 from src.comparison.pareto import compute_pareto_frontier
-from src.comparison.diagnostics_matrix import build_diagnostic_comparison_matrix, DIAGNOSTIC_COMPARISON_NOTES
+from src.comparison.diagnostics_matrix import (
+    build_diagnostic_comparison_matrix,
+    check_diagnostic_configuration_differences,
+    DIAGNOSTIC_COMPARISON_NOTES
+)
 from src.comparison.feature_overlap import (
     build_feature_inclusion_dataframe,
     compute_pairwise_jaccard_matrix,
@@ -131,6 +135,10 @@ def run_model_comparison(
     )
 
     warnings = list(compat.warnings)
+    # Task 2: Visibly identify diagnostic configuration differences
+    diag_notices = check_diagnostic_configuration_differences(diag_suites)
+    warnings.extend(diag_notices)
+
     methodological_limitations = [
         "Default model ranking uses out-of-sample Validation RMSE, which avoids in-sample optimism but does not establish causal validity.",
         "Radar Chart dimensions are relative to the currently compared candidate set [0 = worst, 1 = best] and do not reflect absolute model quality.",
