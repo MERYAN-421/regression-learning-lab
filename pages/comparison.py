@@ -108,11 +108,16 @@ if not available_models:
     )
     st.stop()
 
-# Map diagnostic suites to model IDs (taking the latest suite per model if multiple exist)
-model_diag_map: Dict[str, DiagnosticSuiteResult] = {}
+# Group diagnostic suites by model ID
+suites_by_model: Dict[str, List[DiagnosticSuiteResult]] = {}
 for suite in raw_diagnostic_suites.values():
     if hasattr(suite, "model_id") and suite.model_id:
-        model_diag_map[suite.model_id] = suite
+        suites_by_model.setdefault(suite.model_id, []).append(suite)
+
+# Default mapping (latest suite per model)
+model_diag_map: Dict[str, DiagnosticSuiteResult] = {
+    m_id: suites[-1] for m_id, suites in suites_by_model.items()
+}
 
 
 # -----------------------------------------------------------------------------
@@ -362,7 +367,39 @@ st.markdown(
     """
 )
 
-diag_matrix_rows = build_diagnostic_comparison_matrix(selected_models, diagnostic_suites=model_diag_map)
+active_diag_map: Dict[str, DiagnosticSuiteResult] = dict(model_diag_map)
+
+# Check if any selected model has multiple diagnostic suites
+multi_suite_models = [m for m in selected_models if len(suites_by_model.get(m.model_id, [])) > 1]
+if multi_suite_models:
+    with st.expander("⚙️ Select Specific Diagnostic Suite Version per Model"):
+        for m in multi_suite_models:
+            avail = suites_by_model[m.model_id]
+            suite_opts = {
+                s.suite_id: f"Suite {s.suite_id[:8]} (alpha={s.alpha:.2f}, timestamp={s.timestamp})"
+                for s in avail
+            }
+            chosen_sid = st.selectbox(
+                f"Diagnostic Suite for Model '{m.feature_source_label}' ({m.model_id[:8]}):",
+                options=list(suite_opts.keys()),
+                format_func=lambda sid: suite_opts[sid],
+                key=f"suite_pick_{m.model_id}"
+            )
+            active_diag_map[m.model_id] = next(s for s in avail if s.suite_id == chosen_sid)
+
+# Check for differing significance levels across active suites
+selected_alphas = {
+    s.alpha for m_id, s in active_diag_map.items()
+    if m_id in [m.model_id for m in selected_models]
+}
+if len(selected_alphas) > 1:
+    st.warning(
+        f"⚠️ **Differing Significance Levels Detected**: Selected diagnostic suites use distinct alpha levels "
+        f"({', '.join(f'α={a:.2f}' for a in sorted(list(selected_alphas)))}). "
+        "Reject / Fail-to-Reject decisions cannot be interpreted as directly equivalent test thresholds."
+    )
+
+diag_matrix_rows = build_diagnostic_comparison_matrix(selected_models, diagnostic_suites=active_diag_map)
 diag_matrix_df = pd.DataFrame(diag_matrix_rows)
 
 if not diag_matrix_df.empty:
@@ -459,7 +496,7 @@ if st.button("💾 Record Candidate Selection & Freeze Comparison Experiment", t
         active_target_name=current_meta.target_column,
         active_target_unit=getattr(current_meta, "target_unit", "") or "",
         ranking_policy=selected_ranking_policy,
-        diagnostic_suites=model_diag_map,
+        diagnostic_suites=active_diag_map,
         selected_candidate_id=selected_cand_id,
         candidate_selection_rationale=rationale_notes
     )

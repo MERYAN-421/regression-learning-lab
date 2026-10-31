@@ -60,6 +60,14 @@ def run_model_comparison(
     if not compat.is_compatible:
         raise ValueError(f"Model comparison blocked by compatibility validation: {'; '.join(compat.reasons)}")
 
+    # Candidate Validation (Task 3)
+    if selected_candidate_id is not None:
+        eligible_ids = {m.model_id for m in models}
+        if selected_candidate_id not in eligible_ids:
+            raise ValueError(
+                f"Selected candidate ID '{selected_candidate_id}' is not among compared models: {sorted(list(eligible_ids))}."
+            )
+
     sorted_model_ids = sorted([m.model_id for m in models])
     diag_suites = diagnostic_suites or {}
     diag_suite_ids = {m.model_id: diag_suites[m.model_id].suite_id for m in models if m.model_id in diag_suites}
@@ -105,16 +113,20 @@ def run_model_comparison(
             "is_full_rank": m.design_matrix_metadata.is_full_rank
         }
 
-    # 8. Deterministic Comparison ID
+    # 8. Deterministic Comparison ID (Task 3: incorporates all identity & configuration parameters)
     extra_config = {
         "dimensions": RADAR_DIMENSIONS,
-        "selected_candidate": selected_candidate_id,
         "diag_suites_count": len(diag_suite_ids)
     }
     comp_id, repro_hash = generate_comparison_id(
         split_fingerprint=active_split_fingerprint,
         model_ids=sorted_model_ids,
         ranking_policy=ranking_policy.value,
+        dataset_fingerprint=active_dataset_fingerprint,
+        diagnostic_suite_ids=diag_suite_ids,
+        normalization_config={"method": "min_max", "dimensions": RADAR_DIMENSIONS},
+        selected_candidate_id=selected_candidate_id,
+        candidate_selection_rationale=candidate_selection_rationale,
         extra_config=extra_config
     )
 

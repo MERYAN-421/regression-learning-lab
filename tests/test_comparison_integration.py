@@ -107,6 +107,69 @@ def test_deterministic_comparison_identity():
     assert id1 != id3
 
 
+def test_comparison_identity_incorporates_candidate_rationale_and_suites():
+    """Task 3: Deterministic comparison ID incorporates suites, candidate, and rationale."""
+    base_id, base_h = generate_comparison_id(
+        split_fingerprint="split_123",
+        model_ids=["m1", "m2"],
+        ranking_policy="val_rmse_asc",
+        dataset_fingerprint="ds_fp_1",
+        diagnostic_suite_ids={"m1": "suite_1"},
+        selected_candidate_id="m1",
+        candidate_selection_rationale="Rationale A"
+    )
+
+    # Changing rationale produces distinct ID
+    diff_rat_id, _ = generate_comparison_id(
+        split_fingerprint="split_123",
+        model_ids=["m1", "m2"],
+        ranking_policy="val_rmse_asc",
+        dataset_fingerprint="ds_fp_1",
+        diagnostic_suite_ids={"m1": "suite_1"},
+        selected_candidate_id="m1",
+        candidate_selection_rationale="Rationale B (different)"
+    )
+    assert base_id != diff_rat_id
+
+    # Changing diagnostic suite produces distinct ID
+    diff_suite_id, _ = generate_comparison_id(
+        split_fingerprint="split_123",
+        model_ids=["m1", "m2"],
+        ranking_policy="val_rmse_asc",
+        dataset_fingerprint="ds_fp_1",
+        diagnostic_suite_ids={"m1": "suite_2_alpha_01"},
+        selected_candidate_id="m1",
+        candidate_selection_rationale="Rationale A"
+    )
+    assert base_id != diff_suite_id
+
+    # Changing candidate selection produces distinct ID
+    diff_cand_id, _ = generate_comparison_id(
+        split_fingerprint="split_123",
+        model_ids=["m1", "m2"],
+        ranking_policy="val_rmse_asc",
+        dataset_fingerprint="ds_fp_1",
+        diagnostic_suite_ids={"m1": "suite_1"},
+        selected_candidate_id="m2",
+        candidate_selection_rationale="Rationale A"
+    )
+    assert base_id != diff_cand_id
+
+
+def test_candidate_id_validation_rejects_uncompared_model(integration_synthetic_bundle):
+    """Task 3: Rejects candidate ID that is not among compared models."""
+    split, m1, m2 = integration_synthetic_bundle
+    with pytest.raises(ValueError, match="is not among compared models"):
+        run_model_comparison(
+            models=[m1, m2],
+            active_dataset_id="int_ds",
+            active_dataset_fingerprint="int_ds_fp",
+            active_split_fingerprint=split.split_fingerprint,
+            active_target_name="target_y",
+            selected_candidate_id="unrelated_model_999"
+        )
+
+
 def test_comparison_tracker_preservation_and_stale_invalidation(integration_synthetic_bundle):
     split, m1, m2 = integration_synthetic_bundle
     tracker = ComparisonExperimentTracker()
@@ -347,8 +410,10 @@ def test_real_dataset_demo_kc_house_sales():
     )
 
     assert len(comp_res.leaderboard) == 2
-    # Minimal has fewer parameters, pruned has lower RMSE -> both can be on Pareto frontier
-    assert len(comp_res.pareto_model_ids) >= 1
+    # Minimal has fewer parameters (p=4), pruned has lower RMSE (p=7) -> strict trade-off -> BOTH are Pareto efficient
+    assert m_pruned.model_id in comp_res.pareto_model_ids
+    assert m_min.model_id in comp_res.pareto_model_ids
+    assert len(comp_res.pareto_model_ids) == 2
     # Both are full rank
     assert comp_res.model_complexity[m_pruned.model_id]["is_full_rank"] is True
     assert comp_res.model_complexity[m_min.model_id]["is_full_rank"] is True

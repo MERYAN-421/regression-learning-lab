@@ -102,3 +102,19 @@ def test_empty_models_pareto():
     pareto_ids, points = compute_pareto_frontier([])
     assert pareto_ids == []
     assert points == []
+
+
+def test_strict_prediction_versus_complexity_tradeoff_both_pareto_efficient(pareto_test_models):
+    """
+    Task 4: Asserts that two models exhibiting a strict trade-off
+    (Model A has fewer parameters, Model B has lower error) are BOTH Pareto-efficient.
+    """
+    m1, m2 = pareto_test_models[0], pareto_test_models[1]
+    # Ensure m1 has fewer parameters and higher RMSE than m2
+    assert m1.design_matrix_metadata.num_parameters < m2.design_matrix_metadata.num_parameters
+    assert m1.val_metrics.rmse > m2.val_metrics.rmse
+
+    pareto_ids, points = compute_pareto_frontier([m1, m2])
+    assert m1.model_id in pareto_ids
+    assert m2.model_id in pareto_ids
+    assert len(pareto_ids) == 2

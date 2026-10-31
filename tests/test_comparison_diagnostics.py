@@ -106,3 +106,30 @@ def test_strict_rule_3_no_composite_score(diagnostics_comparison_fixture):
             k_lower = k.lower()
             for term in forbidden_terms:
                 assert term not in k_lower, f"Forbidden diagnostic scoring term '{term}' found in column '{k}'"
+
+
+def test_incompatible_suite_rejected_in_matrix(diagnostics_comparison_fixture):
+    split, m1, m2, suite_m1 = diagnostics_comparison_fixture
+    # Intentionally associate suite_m1 with m2 (Model ID mismatch)
+    matrix = build_diagnostic_comparison_matrix(
+        models=[m2],
+        diagnostic_suites={m2.model_id: suite_m1}
+    )
+    assert len(matrix) == 1
+    row = matrix[0]
+    assert "Incompatible" in row["Suite Compatibility"]
+    assert row["RESET Decision"] == "Incompatible Suite"
+    assert row["RESET Stat / p-val"] == "N/A"
+
+
+def test_diagnostic_specific_configuration_preserved(diagnostics_comparison_fixture):
+    split, m1, m2, suite_m1 = diagnostics_comparison_fixture
+    matrix = build_diagnostic_comparison_matrix(
+        models=[m1],
+        diagnostic_suites={m1.model_id: suite_m1}
+    )
+    assert len(matrix) == 1
+    row = matrix[0]
+    assert "RESET Config" in row
+    assert "powers=" in row["RESET Config"]
+    assert "Ljung-Box Config" in row

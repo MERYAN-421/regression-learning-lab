@@ -47,8 +47,15 @@ def validate_model_compatibility(
     expected_dataset_fp = active_dataset_fingerprint or ref_model.dataset_fingerprint
     expected_split_fp = active_split_fingerprint or ref_model.split_fingerprint
     expected_target_name = active_target_name or getattr(ref_model, "target_name", "target")
+    expected_target_unit = active_target_unit if active_target_unit is not None else getattr(ref_model, "target_unit", None)
     expected_train_count = len(ref_model.train_predictions) if ref_model.train_predictions is not None else ref_model.train_metrics.sample_count
     expected_val_count = len(ref_model.val_predictions) if ref_model.val_predictions is not None else ref_model.val_metrics.sample_count
+
+    # Guard: Missing expected fingerprints
+    if not expected_dataset_fp:
+        reasons.append("Missing expected dataset fingerprint for comparison scope.")
+    if not expected_split_fp:
+        reasons.append("Missing expected split fingerprint for comparison scope.")
 
     # Verify each model against reference
     for idx, m in enumerate(models):
@@ -60,15 +67,19 @@ def validate_model_compatibility(
                 f"expected '{expected_dataset_id}'."
             )
 
-        # 2. Dataset Fingerprint
-        if expected_dataset_fp and m.dataset_fingerprint and m.dataset_fingerprint != expected_dataset_fp:
+        # 2. Dataset Fingerprint (reject missing or mismatched)
+        if not m.dataset_fingerprint:
+            reasons.append(f"Missing dataset fingerprint: Model '{m_id}' has no dataset fingerprint.")
+        elif expected_dataset_fp and m.dataset_fingerprint != expected_dataset_fp:
             reasons.append(
                 f"Dataset fingerprint mismatch: Model '{m_id}' ({m.dataset_fingerprint[:8]}) "
                 f"does not match active dataset version ({expected_dataset_fp[:8]})."
             )
 
-        # 3. Split Fingerprint
-        if expected_split_fp and m.split_fingerprint and m.split_fingerprint != expected_split_fp:
+        # 3. Split Fingerprint (reject missing or mismatched)
+        if not m.split_fingerprint:
+            reasons.append(f"Missing split fingerprint: Model '{m_id}' has no split fingerprint.")
+        elif expected_split_fp and m.split_fingerprint != expected_split_fp:
             reasons.append(
                 f"Split fingerprint mismatch: Model '{m_id}' was trained on split '{m.split_fingerprint[:8]}', "
                 f"expected '{expected_split_fp[:8]}'. Models from different splits cannot be ranked together."
@@ -76,13 +87,24 @@ def validate_model_compatibility(
 
         # 4. Target Name
         m_target = getattr(m, "target_name", "target")
-        if expected_target_name and m_target != expected_target_name:
+        if not m_target:
+            reasons.append(f"Missing target variable name for Model '{m_id}'.")
+        elif expected_target_name and m_target != expected_target_name:
             reasons.append(
                 f"Target variable mismatch: Model '{m_id}' predicts '{m_target}', "
                 f"expected '{expected_target_name}'."
             )
 
-        # 5. Observation Counts
+        # 5. Target Measurement Unit (Task 1: reject mismatch as incompatible)
+        m_unit = getattr(m, "target_unit", None)
+        if expected_target_unit is not None and m_unit is not None:
+            if m_unit != expected_target_unit:
+                reasons.append(
+                    f"Target measurement unit mismatch: Model '{m_id}' uses '{m_unit}', "
+                    f"expected '{expected_target_unit}'. Models measuring different physical units cannot be compared."
+                )
+
+        # 6. Observation Counts (Evaluation scope)
         m_train_n = len(m.train_predictions) if m.train_predictions is not None else m.train_metrics.sample_count
         m_val_n = len(m.val_predictions) if m.val_predictions is not None else m.val_metrics.sample_count
 
@@ -97,26 +119,18 @@ def validate_model_compatibility(
                 f"expected {expected_val_count}."
             )
 
-        # Check for prediction-only mode warnings
+        # AIC/BIC & Inference documentation warnings
         if not m.is_valid_for_inference:
             warnings.append(
                 f"Notice: Model '{m_id}' is in prediction-only mode (rank deficient). "
-                "Conventional coefficient inference is unidentifiable, but predictive metrics remain comparable."
+                "AIC and BIC calculations cannot be compared fairly with full-rank models due to unidentifiable degrees of freedom."
             )
 
-        # Check for target unit difference
-        m_unit = getattr(m, "target_unit", None)
-        if m_unit and active_target_unit and m_unit != active_target_unit:
-            warnings.append(
-                f"Target measurement unit differs: Model '{m_id}' uses '{m_unit}', "
-                f"expected '{active_target_unit}'. Ensure metrics are interpreted under comparable physical units."
-            )
-
-        # Check for intercept differences
         if m.fit_intercept != ref_model.fit_intercept:
             warnings.append(
                 f"Model '{m_id}' has fit_intercept={m.fit_intercept}, differing from reference model "
-                f"'{ref_model.model_id}' (fit_intercept={ref_model.fit_intercept}). R² and AIC definitions differ."
+                f"'{ref_model.model_id}' (fit_intercept={ref_model.fit_intercept}). AIC/BIC and R² cannot be compared fairly "
+                "across models with and without an intercept because log-likelihood baselines differ."
             )
 
     is_compatible = (len(reasons) == 0)
@@ -129,5 +143,5 @@ def validate_model_compatibility(
         dataset_fingerprint=expected_dataset_fp,
         split_fingerprint=expected_split_fp,
         target_name=expected_target_name,
-        target_unit=active_target_unit or ""
+        target_unit=expected_target_unit or ""
     )

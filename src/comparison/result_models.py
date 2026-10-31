@@ -159,13 +159,34 @@ def generate_comparison_id(
     split_fingerprint: str,
     model_ids: List[str],
     ranking_policy: str,
+    dataset_fingerprint: Optional[str] = None,
+    diagnostic_suite_ids: Optional[Dict[str, str]] = None,
+    normalization_config: Optional[Dict[str, Any]] = None,
+    selected_candidate_id: Optional[str] = None,
+    candidate_selection_rationale: Optional[str] = None,
     extra_config: Optional[Dict[str, Any]] = None
 ) -> Tuple[str, str]:
-    """Generates a unique deterministic identifier and reproducibility hash for a comparison."""
+    """
+    Generates a unique deterministic identifier and reproducibility hash for a comparison.
+    Strictly incorporates:
+    - Dataset fingerprint
+    - Split fingerprint
+    - Actual compared Model IDs
+    - Actual Diagnostic Suite IDs
+    - Ranking policy
+    - Normalization configuration
+    - Selected candidate ID
+    - Candidate selection rationale
+    """
     raw_payload = {
+        "dataset_fingerprint": dataset_fingerprint or "",
         "split_fingerprint": split_fingerprint,
         "model_ids": sorted(model_ids),
+        "diagnostic_suite_ids": sorted(list((diagnostic_suite_ids or {}).items())),
         "ranking_policy": ranking_policy,
+        "normalization_config": normalization_config or {},
+        "selected_candidate_id": selected_candidate_id or "",
+        "candidate_selection_rationale": candidate_selection_rationale or "",
         "extra_config": extra_config or {}
     }
     raw_str = json.dumps(safe_serialize_numeric(raw_payload), sort_keys=True)

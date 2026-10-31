@@ -136,17 +136,74 @@ def test_different_target_name_rejected(synthetic_split_and_models):
     assert any("Target variable mismatch" in r for r in res.reasons)
 
 
-def test_target_unit_warning_not_blocking(synthetic_split_and_models):
+def test_target_unit_mismatch_rejected(synthetic_split_and_models):
     split, m1, m2 = synthetic_split_and_models
-    # Differing target unit should issue a warning rather than blocking comparison
+    # Differing target unit must strictly reject comparison (Task 1)
     res = validate_model_compatibility(
         models=[m1, m2],
         active_dataset_id="test_ds",
         active_dataset_fingerprint="ds_fp_abcde",
         active_split_fingerprint="split_fp_12345",
         active_target_name="target_y",
-        active_target_unit="meters"  # models have "points"
+        active_target_unit="meters"  # models use "points"
+    )
+    assert res.is_compatible is False
+    assert any("Target measurement unit mismatch" in r for r in res.reasons)
+
+
+def test_missing_dataset_fingerprint_rejected(synthetic_split_and_models):
+    split, m1, m2 = synthetic_split_and_models
+    m1.dataset_fingerprint = ""  # simulate missing fingerprint
+    res = validate_model_compatibility(
+        models=[m1, m2],
+        active_dataset_id="test_ds",
+        active_dataset_fingerprint="ds_fp_abcde",
+        active_split_fingerprint="split_fp_12345",
+        active_target_name="target_y"
+    )
+    assert res.is_compatible is False
+    assert any("Missing dataset fingerprint" in r for r in res.reasons)
+
+
+def test_missing_split_fingerprint_rejected(synthetic_split_and_models):
+    split, m1, m2 = synthetic_split_and_models
+    m2.split_fingerprint = ""  # simulate missing split fingerprint
+    res = validate_model_compatibility(
+        models=[m1, m2],
+        active_dataset_id="test_ds",
+        active_dataset_fingerprint="ds_fp_abcde",
+        active_split_fingerprint="split_fp_12345",
+        active_target_name="target_y"
+    )
+    assert res.is_compatible is False
+    assert any("Missing split fingerprint" in r for r in res.reasons)
+
+
+def test_incompatible_evaluation_scopes_rejected(synthetic_split_and_models):
+    split, m1, m2 = synthetic_split_and_models
+    # Artificially alter validation prediction length to simulate mismatched partition
+    m2.val_predictions = m2.val_predictions[:10]
+    res = validate_model_compatibility(
+        models=[m1, m2],
+        active_dataset_id="test_ds",
+        active_dataset_fingerprint="ds_fp_abcde",
+        active_split_fingerprint="split_fp_12345",
+        active_target_name="target_y"
+    )
+    assert res.is_compatible is False
+    assert any("Validation sample count mismatch" in r for r in res.reasons)
+
+
+def test_intercept_difference_documents_aic_bic_limitation(synthetic_split_and_models):
+    split, m1, m2 = synthetic_split_and_models
+    m2.fit_intercept = False
+    res = validate_model_compatibility(
+        models=[m1, m2],
+        active_dataset_id="test_ds",
+        active_dataset_fingerprint="ds_fp_abcde",
+        active_split_fingerprint="split_fp_12345",
+        active_target_name="target_y",
+        active_target_unit="points"
     )
     assert res.is_compatible is True
-    assert len(res.warnings) > 0
-    assert any("Target measurement unit differs" in w for w in res.warnings)
+    assert any("AIC/BIC" in w for w in res.warnings)

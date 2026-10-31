@@ -16,17 +16,19 @@ To guarantee fair, statistically sound model comparisons, candidate models must 
 
 ### 2.1 Mandatory Compatibility Requirements
 Models are verified against the active environment and against each other:
-- **Dataset Identity**: Both `dataset_id` and content `dataset_fingerprint` must match identically.
-- **Split Partition Identity**: The `split_fingerprint` must match identically, ensuring that training, validation, and test observations are perfectly aligned row-by-row.
-- **Target Variable & Units**: The predicted target column must match identically. If target measurement units differ, an explicit warning is recorded.
-- **Observation Counts**: Sample counts ($n_{\text{train}}$ and $n_{\text{val}}$) must be identical across all compared models.
+- **Dataset Identity**: Both `dataset_id` and content `dataset_fingerprint` must match identically. Missing fingerprints are strictly rejected.
+- **Split Partition Identity**: The `split_fingerprint` must match identically, ensuring that training, validation, and test observations are perfectly aligned row-by-row. Missing split fingerprints are strictly rejected.
+- **Target Variable & Units**: The predicted target column and physical measurement unit must match identically. Target unit mismatches strictly block comparison rather than warning only.
+- **Evaluation Partition Scope**: Sample counts ($n_{\text{train}}$ and $n_{\text{val}}$) must be identical across all compared models.
 
-### 2.2 Legitimate Comparison Dimensions
+### 2.2 Legitimate Comparison Dimensions & AIC/BIC Limitations
 The comparison laboratory explicitly accommodates valid modeling variations:
 - Feature selection algorithms (Pearson, ANOVA F-test, Mutual Information, RFE, Forward SFS, Backward SFS, Lasso).
 - Requested feature count ($K$) and OLS parameter count ($p$).
 - Numeric scaling (unscaled vs. StandardScaler).
 - Rank-deficient vs. full-rank design matrices (transparently badged).
+
+*AIC/BIC Comparability Restriction*: AIC and BIC cannot be compared fairly when models differ in intercept conventions (`fit_intercept=True` vs `False`), because the baseline likelihood null models differ. Rank-deficient models cannot be fairly compared to full-rank models using AIC/BIC due to unidentifiable degrees of freedom.
 
 ---
 
@@ -115,11 +117,15 @@ Integrates Milestone 4 `DiagnosticSuiteResult` records to present assumption tes
 - **Normality**: Jarque-Bera test ($\text{JB}$ statistic and $p$-value).
 - **Multicollinearity**: Maximum Variance Inflation Factor ($\text{VIF}_{\max}$) and Design Matrix Condition Number ($\kappa(X)$).
 
-### 6.1 Strict Enforcement of Rule 3
-- Missing diagnostic suites are labeled as `"Not Run"` rather than treated as favorable.
-- Inapplicable diagnostics (e.g. Durbin-Watson on cross-sectional random splits) are labeled `"Not Applicable"`.
-- No composite quality score, pass count, or compliance percentage is computed.
-- High $p$-values indicate failure to reject $H_0$, not confirmation that the regression specification is true or causal.
+### 6.1 Suite Compatibility & Configuration Preservation
+- **Identity & Fingerprint Alignment**: Each referenced `DiagnosticSuiteResult` is strictly verified against its candidate model: `suite.model_id == model.model_id`, `suite.dataset_fingerprint == model.dataset_fingerprint`, and `suite.split_fingerprint == model.split_fingerprint`. Misaligned suites are flagged as `"Incompatible Suite"` and never substituted.
+- **Analysis Scope**: Diagnostic tests must evaluate the training partition (`data_scope == "train"`).
+- **Configuration Transparency**: The matrix explicitly preserves and displays significance levels ($\alpha$) and test-specific parameters (e.g. RESET powers, Ljung-Box lags). If suites use different $\alpha$ levels, an explicit warning is presented.
+- **Strict Enforcement of Rule 3**:
+  - Missing diagnostic suites are labeled as `"Not Run"` rather than treated as favorable.
+  - Inapplicable diagnostics (e.g. Durbin-Watson on cross-sectional random splits) are labeled `"Not Applicable"`.
+  - Zero composite quality score, pass count, or compliance percentage is computed.
+  - High $p$-values indicate failure to reject $H_0$, not confirmation that the regression specification is true or causal.
 
 ---
 
