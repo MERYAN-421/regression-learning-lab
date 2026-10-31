@@ -206,6 +206,8 @@ class OLSDesignMatrixBuilder:
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """
         Transform a feature DataFrame using fitted imputers, encoders, and intercept rules.
+        Guarantees that resulting columns strictly match self.encoded_feature_names in both
+        name and order, preserving contracts across Training, Validation, and Test partitions.
         """
         if not self.is_fitted:
             raise RuntimeError("OLSDesignMatrixBuilder must be fitted before transforming data.")
@@ -215,46 +217,70 @@ class OLSDesignMatrixBuilder:
             raise ValueError(f"Required features {missing_cols} missing from DataFrame.")
 
         X_sub = X[self.selected_original_features].copy()
-        arrays_to_concat: List[np.ndarray] = []
-        col_names: List[str] = []
 
-        # Add intercept column
-        if self.fit_intercept:
-            intercept_arr = np.ones((len(X_sub), 1), dtype=float)
-            arrays_to_concat.append(intercept_arr)
-            col_names.append("const")
-
-        # Transform numeric features
+        # 1. Transform numeric features and store per column
+        num_cols_dict: Dict[str, np.ndarray] = {}
         if self.numeric_features and self.num_imputer is not None:
             num_imp = self.num_imputer.transform(X_sub[self.numeric_features])
             if self.scale_numeric and self.scaler is not None:
                 num_arr = self.scaler.transform(num_imp)
             else:
                 num_arr = num_imp
-            arrays_to_concat.append(num_arr)
-            col_names.extend(self.numeric_features)
+            for idx, col in enumerate(self.numeric_features):
+                num_cols_dict[col] = num_arr[:, idx : idx + 1]
 
-        # Transform categorical features
+        # 2. Transform categorical features and store per feature
+        cat_cols_dict: Dict[str, np.ndarray] = {}
         if self.categorical_features and self.cat_imputer is not None and self.cat_encoder is not None:
             cat_df = X_sub[self.categorical_features].copy()
             for col in self.categorical_features:
                 cat_df[col] = cat_df[col].replace({None: np.nan})
             cat_imp = self.cat_imputer.transform(cat_df)
             cat_arr = self.cat_encoder.transform(cat_imp)
-            arrays_to_concat.append(cat_arr)
 
-            # Get encoder output feature names
-            cat_feature_names = []
+            # Map slice for each categorical feature
+            start_col = 0
             for idx, col in enumerate(self.categorical_features):
-                cat_feature_names.extend(self.original_to_encoded_mapping.get(col, []))
-            col_names.extend(cat_feature_names)
+                dummies = self.original_to_encoded_mapping.get(col, [])
+                k_dummies = len(dummies)
+                if k_dummies > 0:
+                    cat_cols_dict[col] = cat_arr[:, start_col : start_col + k_dummies]
+                    start_col += k_dummies
+                else:
+                    cat_cols_dict[col] = np.empty((len(X_sub), 0), dtype=float)
+
+        # 3. Assemble columns in the EXACT order of self.selected_original_features
+        arrays_to_concat: List[np.ndarray] = []
+        col_names: List[str] = []
+
+        if self.fit_intercept:
+            intercept_arr = np.ones((len(X_sub), 1), dtype=float)
+            arrays_to_concat.append(intercept_arr)
+            col_names.append("const")
+
+        for orig in self.selected_original_features:
+            if orig in num_cols_dict:
+                arrays_to_concat.append(num_cols_dict[orig])
+                col_names.append(orig)
+            elif orig in cat_cols_dict:
+                arr = cat_cols_dict[orig]
+                if arr.shape[1] > 0:
+                    arrays_to_concat.append(arr)
+                    col_names.extend(self.original_to_encoded_mapping.get(orig, []))
 
         if not arrays_to_concat:
             full_matrix = np.empty((len(X_sub), 0), dtype=float)
         else:
             full_matrix = np.hstack(arrays_to_concat)
 
-        return pd.DataFrame(full_matrix, columns=col_names, index=X.index)
+        result_df = pd.DataFrame(full_matrix, columns=col_names, index=X.index)
+        if list(result_df.columns) != list(self.encoded_feature_names):
+            raise RuntimeError(
+                f"Design matrix column order contract violation: "
+                f"Generated columns {list(result_df.columns)} do not match "
+                f"metadata encoded feature names {list(self.encoded_feature_names)}."
+            )
+        return result_df
 
     def _compute_matrix_diagnostics(
         self,

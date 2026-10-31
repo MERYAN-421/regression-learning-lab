@@ -70,3 +70,56 @@ def test_metrics_zero_variance_target():
     metrics = compute_regression_metrics(y_true=y_const, y_pred=y_const, num_non_intercept_parameters=1)
     assert metrics.r2 == 1.0
     assert metrics.rmse == 0.0
+
+
+def test_metrics_intercept_only_adjusted_r2():
+    """
+    Verify Task 4 edge case:
+    Intercept-only model (num_non_intercept_parameters = 0).
+    Adjusted R² should be 0.0 by mathematical definition (adding no predictors beyond mean).
+    """
+    y_true = np.array([2.0, 4.0, 6.0, 8.0, 10.0])
+    y_pred = np.full_like(y_true, fill_value=np.mean(y_true))  # Mean predictions
+
+    metrics = compute_regression_metrics(
+        y_true=y_true,
+        y_pred=y_pred,
+        num_non_intercept_parameters=0,
+        is_in_sample=True,
+        fit_intercept=True
+    )
+    assert metrics.r2 == 0.0
+    assert metrics.adj_r2 == 0.0
+
+
+def test_metrics_no_intercept_adjusted_r2_against_statsmodels():
+    """
+    Verify Task 4 edge case:
+    No-intercept model (fit_intercept = False).
+    Uses uncentered degrees of freedom: df_total = n, df_resid = n - p.
+    Verify exact match with statsmodels uncentered rsquared_adj.
+    """
+    import statsmodels.api as sm
+
+    np.random.seed(42)
+    n = 50
+    X = np.random.normal(5, 2, (n, 2))
+    # True relationship with zero intercept
+    y = 2.5 * X[:, 0] - 1.2 * X[:, 1] + np.random.normal(0, 0.5, n)
+
+    # Fit statsmodels without constant
+    res = sm.OLS(y, X).fit()
+    y_pred = res.predict(X)
+
+    metrics = compute_regression_metrics(
+        y_true=y,
+        y_pred=y_pred,
+        num_non_intercept_parameters=2,
+        is_in_sample=True,
+        fit_intercept=False
+    )
+
+    # Check match within numerical tolerance
+    assert abs(metrics.r2 - res.rsquared) < 1e-6
+    assert abs(metrics.adj_r2 - res.rsquared_adj) < 1e-6
+

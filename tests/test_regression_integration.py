@@ -163,8 +163,43 @@ def test_tracker_controlled_test_evaluation(regression_test_bundle):
     final_model = tracker.finalize_test_evaluation(model.model_id, split, refit_policy="train_val")
     assert final_model.test_metrics is not None
     assert final_model.test_evaluation_status == "evaluated_train_val_refit"
+    assert final_model.test_refit_policy == "train_val"
     assert final_model.test_metrics.rmse > 0
     assert len(final_model.test_predictions) == len(split.X_test)
+
+    # 2. Repeated test evaluation must be blocked by backend lock
+    with pytest.raises(RuntimeError, match="strictly locked"):
+        tracker.finalize_test_evaluation(model.model_id, split, refit_policy="train_val")
+
+    # 3. Policy switching after finalization must also be blocked
+    with pytest.raises(RuntimeError, match="strictly locked"):
+        tracker.finalize_test_evaluation(model.model_id, split, refit_policy="train_only")
+
+
+def test_ols_dataset_fingerprint_mismatch_rejection(regression_test_bundle):
+    """Verify that train_ols_experiment rejects mismatched dataset fingerprints when accepting FeatureSelectionResult."""
+    split = regression_test_bundle
+
+    fs_res = run_feature_selection(
+        X_train=split.X_train,
+        y_train=split.y_train,
+        X_val=split.X_val,
+        y_val=split.y_val,
+        method_id="pearson",
+        k=2,
+        cv_strategy="random",
+        split_fingerprint=split.split_fingerprint
+    )
+    # Tamper with dataset fingerprint to simulate outdated selection from older dataset version
+    fs_res.dataset_fingerprint = "different_dataset_fp_888"
+
+    with pytest.raises(ValueError, match="Dataset fingerprint mismatch"):
+        train_ols_experiment(
+            split_result=split,
+            feature_source=fs_res,
+            dataset_fingerprint="active_dataset_fp_123"
+        )
+
 
 
 # =====================================================================

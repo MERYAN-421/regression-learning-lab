@@ -43,7 +43,8 @@ def compute_regression_metrics(
     y_pred: Union[pd.Series, np.ndarray],
     num_non_intercept_parameters: int = 1,
     split_name: str = "Train",
-    is_in_sample: bool = True
+    is_in_sample: bool = True,
+    fit_intercept: bool = True
 ) -> RegressionMetrics:
     """
     Compute MSE, RMSE, MAE, R², and in-sample Adjusted R².
@@ -54,6 +55,7 @@ def compute_regression_metrics(
         num_non_intercept_parameters: Number of slope parameters (p).
         split_name: Name of the partition ("Train", "Validation", or "Test").
         is_in_sample: True if computing on training set; False for out-of-sample validation/test.
+        fit_intercept: True if model includes intercept; False for no-intercept regression.
     """
     y_t = np.asarray(y_true, dtype=float).ravel()
     y_p = np.asarray(y_pred, dtype=float).ravel()
@@ -77,13 +79,19 @@ def compute_regression_metrics(
     rmse = float(np.sqrt(mse))
     mae = float(np.mean(np.abs(residuals)))
 
-    # Total Sum of Squares (TSS) around actual mean
-    y_mean = np.mean(y_t)
-    tss = float(np.sum((y_t - y_mean) ** 2))
+    # Total Sum of Squares (TSS)
+    # When an intercept is included, TSS is centered around the sample mean (df_total = n - 1).
+    # When fit_intercept is False, econometrics and statsmodels define uncentered TSS = sum(y^2) (df_total = n).
+    if fit_intercept:
+        y_mean = np.mean(y_t)
+        tss = float(np.sum((y_t - y_mean) ** 2))
+    else:
+        tss = float(np.sum(y_t ** 2))
+
     rss = float(np.sum(residuals ** 2))
 
     if tss < 1e-12:
-        # Zero variance in target
+        # Zero variance / zero magnitude in target
         r2 = 1.0 if rss < 1e-12 else 0.0
     else:
         r2 = float(1.0 - (rss / tss))
@@ -91,14 +99,27 @@ def compute_regression_metrics(
     # Adjusted R² is an in-sample goodness-of-fit criterion
     adj_r2: Optional[float] = None
     notes = ""
-    p = max(1, num_non_intercept_parameters)
+    p = max(0, int(num_non_intercept_parameters))
 
     if is_in_sample:
-        df_resid = n - p - 1
-        if df_resid > 0:
-            adj_r2 = float(1.0 - (1.0 - r2) * ((n - 1) / df_resid))
+        if fit_intercept:
+            if p == 0:
+                # Intercept-only model: R² is 0.0 and Adj R² is 0.0
+                df_resid = n - 1
+                adj_r2 = 0.0 if df_resid > 0 else None
+            else:
+                df_resid = n - p - 1
+                if df_resid > 0:
+                    adj_r2 = float(1.0 - (1.0 - r2) * ((n - 1) / df_resid))
+                else:
+                    notes = f"Adjusted R² undefined: non-positive residual degrees of freedom (n={n} <= p+1={p+1})."
         else:
-            notes = "Adjusted R² undefined: non-positive residual degrees of freedom (n <= p + 1)."
+            # No-intercept model: uncentered total df = n, residual df = n - p
+            df_resid = n - p
+            if df_resid > 0:
+                adj_r2 = float(1.0 - (1.0 - r2) * (n / df_resid))
+            else:
+                notes = f"Adjusted R² undefined: non-positive residual degrees of freedom (n={n} <= p={p})."
     else:
         notes = "Adjusted R² is an in-sample penalization formula; reporting standard out-of-sample R²."
 

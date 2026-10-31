@@ -176,18 +176,27 @@ try:
             f"✅ **Full Column Rank Verified**: Matrix rank is {meta.matrix_rank} across {meta.num_parameters} columns. "
             f"Condition number = `{meta.condition_number:.2e}`. OLS normal equations yield a uniquely identifiable solution."
         )
+        allow_pred_only = False
     else:
         st.error(
-            f"⚠️ **Rank Deficiency Detected**: Matrix rank is {meta.matrix_rank} but {meta.num_parameters} columns were supplied. "
-            "Exact linear dependence prevents unique coefficient identification."
+            f"🚫 **Statistical Inference Blocked (Rank Deficient)**: Matrix rank is {meta.matrix_rank} but {meta.num_parameters} columns were supplied "
+            f"(Residual df = {meta.residual_degrees_of_freedom}). "
+            "Exact linear dependence prevents parameter identifiability: the normal equations $(X^T X)\\beta = X^T y$ "
+            "have infinitely many mathematical solutions. Standard errors, t-statistics, p-values, and confidence intervals cannot be uniquely identified."
         )
         if meta.collinear_columns:
-            st.warning(f"**Identified Linearly Dependent Columns**: {', '.join(meta.collinear_columns)}")
+            st.warning(f"**Identified Linearly Dependent Columns**: {', '.join([f'`{c}`' for c in meta.collinear_columns])}")
             st.info(
                 "💡 **Educational Insight**: In King County House Sales, `sqft_living = sqft_above + sqft_basement`. "
                 "Including all three predictors creates an exact linear identity ($X_1 - X_2 - X_3 = 0$), causing $(X^T X)$ "
-                "to become singular. In practice, omit one component or model the composite total."
+                "to become singular. To restore identifiable inference, omit one component or model the composite total."
             )
+        allow_pred_only = st.checkbox(
+            "Enable Prediction-Only Model (Statistical Inference & Significance Tests Disabled)",
+            value=False,
+            key="chk_allow_pred_only",
+            help="Fits OLS using pseudoinverse for prediction purposes only. Parameter hypothesis tests (standard errors, t-stats, p-values) will be omitted."
+        )
 
     # Reference category explanation expander
     if meta.categorical_features:
@@ -218,25 +227,38 @@ st.divider()
 # -----------------------------------------------------------------------------
 st.header("3. Estimate Ordinary Least Squares (OLS) Parameters")
 
-btn_train = st.button("🚀 Train OLS Regression Model", type="primary", key="btn_train_ols")
+if not meta.is_valid_for_inference and not allow_pred_only:
+    st.button(
+        "🚫 Train OLS Model (Inference Blocked)",
+        disabled=True,
+        key="btn_train_ols_disabled",
+        help="Design matrix is rank-deficient. Eliminate collinear predictors or check 'Enable Prediction-Only Model' above to proceed."
+    )
+else:
+    btn_label = "🚀 Train OLS Regression Model" if meta.is_valid_for_inference else "⚠️ Train Prediction-Only OLS Model"
+    btn_train = st.button(btn_label, type="primary", key="btn_train_ols")
 
-if btn_train:
-    with st.spinner(f"Fitting OLS model on {len(split_res.X_train):,} training observations via statsmodels..."):
-        try:
-            model_res = train_ols_experiment(
-                split_result=split_res,
-                feature_source=selected_fs_result if selected_fs_result is not None else "all_features",
-                target_name=current_meta.target_column,
-                fit_intercept=fit_intercept,
-                scale_numeric=scale_numeric,
-                dataset_id=current_meta.id,
-                dataset_fingerprint=fingerprint
-            )
-            tracker.add_model(model_res)
-            st.session_state["active_ols_model"] = model_res
-            st.success(f"✅ OLS Model `{model_res.model_id}` successfully trained in {model_res.trained_timestamp}!")
-        except Exception as e:
-            st.error(f"Model estimation error: {e}")
+    if btn_train:
+        with st.spinner(f"Fitting OLS model on {len(split_res.X_train):,} training observations via statsmodels..."):
+            try:
+                model_res = train_ols_experiment(
+                    split_result=split_res,
+                    feature_source=selected_fs_result if selected_fs_result is not None else "all_features",
+                    target_name=current_meta.target_column,
+                    fit_intercept=fit_intercept,
+                    scale_numeric=scale_numeric,
+                    dataset_id=current_meta.id,
+                    dataset_fingerprint=fingerprint,
+                    allow_rank_deficient=allow_pred_only
+                )
+                tracker.add_model(model_res)
+                st.session_state["active_ols_model"] = model_res
+                if model_res.is_valid_for_inference:
+                    st.success(f"✅ OLS Model `{model_res.model_id}` successfully trained in {model_res.trained_timestamp}!")
+                else:
+                    st.warning(f"⚠️ Prediction-Only OLS Model `{model_res.model_id}` trained. Conventional statistical inference is omitted.")
+            except Exception as e:
+                st.error(f"Model estimation error: {e}")
 
 # Retrieve latest active model
 active_model: Optional[OLSModelResult] = st.session_state.get("active_ols_model")
@@ -247,6 +269,13 @@ if active_model is not None and active_model.split_fingerprint == split_res.spli
     # -----------------------------------------------------------------------------
     st.divider()
     st.header(f"4. Econometric Summary: {active_model.model_name}")
+
+    if not active_model.is_valid_for_inference:
+        st.error(
+            "🚫 **Statistical Inference Disabled**: This model was fitted in Prediction-Only mode because the design matrix "
+            "is rank-deficient. Standard errors, t-statistics, p-values, and confidence intervals are omitted because parameters "
+            "cannot be uniquely identified."
+        )
 
     if active_model.post_selection_inference_warning:
         st.warning(
@@ -271,9 +300,10 @@ if active_model is not None and active_model.split_fingerprint == split_res.spli
         "📋 Copyable Text Representation"
     ])
     with tab_eq_preview:
+        coef_series = active_model.coef_table.set_index("Feature")["Coefficient"]
         _, preview_fitted_eq = generate_regression_equation_latex(
             target_name=current_meta.target_column,
-            params=active_model.fitted_model.params,
+            params=coef_series,
             fit_intercept=active_model.fit_intercept,
             max_terms=6
         )

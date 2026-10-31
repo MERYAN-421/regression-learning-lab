@@ -38,7 +38,8 @@ class RegressionExperimentTracker:
     def get_valid_models(
         self,
         current_split_fingerprint: str,
-        current_dataset_id: Optional[str] = None
+        current_dataset_id: Optional[str] = None,
+        current_dataset_fingerprint: Optional[str] = None
     ) -> List[OLSModelResult]:
         """
         Return models strictly compatible with the active dataset and split fingerprint.
@@ -47,8 +48,11 @@ class RegressionExperimentTracker:
         valid = []
         for m in self._models.values():
             if m.split_fingerprint == current_split_fingerprint:
-                if current_dataset_id is None or m.dataset_id == current_dataset_id:
-                    valid.append(m)
+                if current_dataset_id is not None and m.dataset_id != current_dataset_id:
+                    continue
+                if current_dataset_fingerprint is not None and m.dataset_fingerprint != current_dataset_fingerprint:
+                    continue
+                valid.append(m)
         return valid
 
     def clear(self) -> None:
@@ -57,11 +61,13 @@ class RegressionExperimentTracker:
 
     def generate_comparison_table(
         self,
-        current_split_fingerprint: Optional[str] = None
+        current_split_fingerprint: Optional[str] = None,
+        current_dataset_id: Optional[str] = None,
+        current_dataset_fingerprint: Optional[str] = None
     ) -> pd.DataFrame:
         """Build comparative summary leaderboard of valid models."""
         models_to_compare = (
-            self.get_valid_models(current_split_fingerprint)
+            self.get_valid_models(current_split_fingerprint, current_dataset_id, current_dataset_fingerprint)
             if current_split_fingerprint is not None
             else self.get_all_models()
         )
@@ -82,9 +88,21 @@ class RegressionExperimentTracker:
             refit_policy: 'train_val' (refits fixed specification on Train+Val before test)
                           or 'train_only' (evaluates train-fitted model directly on test).
         """
+        if refit_policy not in ("train_val", "train_only"):
+            raise ValueError(f"Unknown refit_policy: '{refit_policy}'. Must be 'train_val' or 'train_only'.")
+
         model = self.get_model(model_id)
         if model is None:
             raise KeyError(f"Model ID '{model_id}' not found in tracker.")
+
+        # Backend lock: prevent repeated final evaluation or refit policy alterations
+        if model.test_evaluation_status != "untested":
+            raise RuntimeError(
+                f"Model '{model_id}' has already been evaluated on the Test set "
+                f"(status: '{model.test_evaluation_status}', policy: '{model.test_refit_policy}'). "
+                "Repeated test evaluation and post-hoc refit policy modifications are strictly locked "
+                "to prevent test set data snooping and maintain statistical validity."
+            )
 
         if model.split_fingerprint != split_result.split_fingerprint:
             raise ValueError("Split fingerprint mismatch! Cannot evaluate test data from a different split.")
@@ -124,12 +142,14 @@ class RegressionExperimentTracker:
                 y_pred=test_preds,
                 num_non_intercept_parameters=p_slopes,
                 split_name="Test (Train+Val Refit)",
-                is_in_sample=False
+                is_in_sample=False,
+                fit_intercept=model.fit_intercept
             )
 
             model.test_metrics = test_metrics
             model.test_predictions = test_preds
             model.test_evaluation_status = "evaluated_train_val_refit"
+            model.test_refit_policy = "train_val"
             model.warnings.append(
                 f"🔒 Final Test Evaluation completed (Train+Val Refit): Test RMSE={test_metrics.rmse:.3f}, "
                 f"Test R²={test_metrics.r2:.4f}."
@@ -149,18 +169,18 @@ class RegressionExperimentTracker:
                 y_pred=test_preds,
                 num_non_intercept_parameters=p_slopes,
                 split_name="Test (Train-Only Model)",
-                is_in_sample=False
+                is_in_sample=False,
+                fit_intercept=model.fit_intercept
             )
 
             model.test_metrics = test_metrics
             model.test_predictions = test_preds
             model.test_evaluation_status = "evaluated_train_only"
+            model.test_refit_policy = "train_only"
             model.warnings.append(
                 f"🔒 Final Test Evaluation completed (Train-Only Model): Test RMSE={test_metrics.rmse:.3f}, "
                 f"Test R²={test_metrics.r2:.4f}."
             )
-        else:
-            raise ValueError(f"Unknown refit_policy: '{refit_policy}'. Must be 'train_val' or 'train_only'.")
 
         self.add_model(model)
         return model

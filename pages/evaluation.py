@@ -253,51 +253,68 @@ st.warning(
     "causes data snooping and produces overly optimistic performance estimates."
 )
 
-with st.expander("⚙️ Final Test Evaluation Policy & Authorization", expanded=True):
-    st.markdown(
-        """
-        Choose a finalized model evaluation protocol:
-        - **Refit on Train + Validation (Recommended)**: Retains the fixed model specification, refits the imputer, encoder, 
-          and OLS parameters on the pooled $(X_{\\text{train}} \\cup X_{\\text{val}})$ sample to maximize sample size, and evaluates on $X_{\\text{test}}$.
-        - **Evaluate Train-Only Model**: Evaluates the model trained exclusively on $X_{\\text{train}}$ directly against $X_{\\text{test}}$ without re-estimation.
-        """
+if active_model.test_evaluation_status != "untested":
+    st.success(f"🔒 **Final Test Evaluation Completed & Locked** (Policy: `{active_model.test_refit_policy}`)")
+    st.caption(
+        "This model configuration is finalized. Repeated evaluation and post-hoc refit policy modifications "
+        "for this model are strictly locked in both backend and interface to prevent test-set data snooping."
     )
-    refit_choice = st.radio(
-        "Refit Policy for Test Finalization:",
-        [
-            "Refit specification on Train + Validation (Recommended)",
-            "Use Train-Only Model Directly"
-        ],
-        index=0,
-        key="eval_test_refit_radio"
-    )
-    policy_code = "train_val" if refit_choice.startswith("Refit") else "train_only"
+    with st.expander("ℹ️ Technical Safeguard Boundaries & Audit Scope", expanded=False):
+        st.markdown(
+            """
+            **Safeguard Scope**:
+            - **In-Memory & Tracker Lock**: The `RegressionExperimentTracker` permanently rejects subsequent `finalize_test_evaluation()` calls for this model ID.
+            - **Refit Policy Immutable**: The chosen policy (`train_val` vs. `train_only`) cannot be retroactively altered to search for a more favorable test score.
+            - **Persistence Boundary**: This safeguard enforces protocol compliance during the current workflow. In the absence of a shared persistent audit ledger or database, creating an entirely new experiment instance or restarting the session cannot technically prevent re-accessing the test split. Researchers are ethically bound to report the pre-registered first test evaluation.
+            """
+        )
+else:
+    with st.expander("⚙️ Final Test Evaluation Policy & Authorization", expanded=True):
+        st.markdown(
+            """
+            Choose a finalized model evaluation protocol:
+            - **Refit on Train + Validation (Recommended)**: Retains the fixed model specification, refits the imputer, encoder, 
+              and OLS parameters on the pooled $(X_{\\text{train}} \\cup X_{\\text{val}})$ sample to maximize sample size, and evaluates on $X_{\\text{test}}$.
+            - **Evaluate Train-Only Model**: Evaluates the model trained exclusively on $X_{\\text{train}}$ directly against $X_{\\text{test}}$ without re-estimation.
+            """
+        )
+        refit_choice = st.radio(
+            "Refit Policy for Test Finalization:",
+            [
+                "Refit specification on Train + Validation (Recommended)",
+                "Use Train-Only Model Directly"
+            ],
+            index=0,
+            key="eval_test_refit_radio"
+        )
+        policy_code = "train_val" if refit_choice.startswith("Refit") else "train_only"
 
-    confirm_finalize = st.checkbox(
-        "I confirm that feature selection, model comparison, and architectural exploration are complete.",
-        value=False,
-        key="eval_test_confirm_checkbox"
-    )
+        confirm_finalize = st.checkbox(
+            "I confirm that feature selection, model comparison, and architectural exploration are complete.",
+            value=False,
+            key="eval_test_confirm_checkbox"
+        )
 
-    btn_eval_test = st.button(
-        "🚀 Run Final Test Evaluation",
-        type="primary",
-        disabled=not confirm_finalize,
-        key="btn_run_final_test"
-    )
+        btn_eval_test = st.button(
+            "🚀 Run Final Test Evaluation",
+            type="primary",
+            disabled=not confirm_finalize,
+            key="btn_run_final_test"
+        )
 
-    if btn_eval_test:
-        with st.spinner(f"Evaluating model '{active_model.model_id}' on unseen Test partition ({len(split_res.X_test):,} samples)..."):
-            try:
-                finalized_model = tracker.finalize_test_evaluation(
-                    model_id=active_model.model_id,
-                    split_result=split_res,
-                    refit_policy=policy_code
-                )
-                st.session_state["active_ols_model"] = finalized_model
-                st.success(f"✅ Final Test Evaluation completed for model `{finalized_model.model_id}`!")
-            except Exception as e:
-                st.error(f"Test evaluation error: {e}")
+        if btn_eval_test:
+            with st.spinner(f"Evaluating model '{active_model.model_id}' on unseen Test partition ({len(split_res.X_test):,} samples)..."):
+                try:
+                    finalized_model = tracker.finalize_test_evaluation(
+                        model_id=active_model.model_id,
+                        split_result=split_res,
+                        refit_policy=policy_code
+                    )
+                    st.session_state["active_ols_model"] = finalized_model
+                    st.success(f"✅ Final Test Evaluation completed for model `{finalized_model.model_id}`!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Test evaluation error: {e}")
 
 # Display Test Scorecard if evaluated
 if active_model.test_metrics is not None:

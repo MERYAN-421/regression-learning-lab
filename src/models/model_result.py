@@ -45,8 +45,10 @@ class OLSModelResult:
     df_resid: int
     df_model: int
     post_selection_inference_warning: bool
+    is_valid_for_inference: bool = True
     warnings: List[str] = field(default_factory=list)
     test_evaluation_status: str = "untested"  # "untested", "evaluated_train_only", "evaluated_train_val_refit"
+    test_refit_policy: Optional[str] = None  # "train_val" or "train_only"
     trained_timestamp: str = ""
     # In-memory fitted references
     fitted_model: Optional[Any] = None
@@ -70,7 +72,8 @@ class OLSModelResult:
             "Train Adj R²": round(self.train_metrics.adj_r2, 4) if self.train_metrics.adj_r2 is not None else "N/A",
             "F-stat": round(self.f_statistic, 2) if np_finite(self.f_statistic) else "N/A",
             "Full Rank": "✅ Yes" if self.design_matrix_metadata.is_full_rank else "⚠️ Rank Deficient",
-            "Test Status": self.test_evaluation_status
+            "Inference Valid": "✅ Yes" if self.is_valid_for_inference else "❌ Blocked",
+            "Test Status": f"{self.test_evaluation_status} ({self.test_refit_policy})" if self.test_refit_policy else self.test_evaluation_status
         }
 
 

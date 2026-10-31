@@ -107,3 +107,58 @@ def test_ols_coefficient_table_structure(synthetic_linear_dataset):
     for _, row in df_coef.iterrows():
         if row["CI Lower (95%)"] != "N/A":
             assert float(row["CI Lower (95%)"]) <= float(row["Coefficient"]) <= float(row["CI Upper (95%)"])
+
+
+def test_rank_deficiency_blocks_inference_by_default():
+    """Verify that fitting an OLS model on collinear predictors raises ValueError by default."""
+    np.random.seed(42)
+    n = 60
+    x1 = np.random.normal(0, 1, n)
+    x2 = np.random.normal(0, 1, n)
+    x3 = x1 + x2  # Exact collinearity
+    X = pd.DataFrame({"x1": x1, "x2": x2, "x3": x3})
+    y = pd.Series(2.0 + 3.0 * x1 - 1.0 * x2 + np.random.normal(0, 0.1, n), name="y")
+
+    design_res, _ = build_ols_design_matrices(X, selected_features=["x1", "x2", "x3"], fit_intercept=True)
+    assert not design_res.metadata.is_valid_for_inference
+    assert not design_res.metadata.is_full_rank
+
+    with pytest.raises(ValueError, match="OLS statistical inference blocked"):
+        fit_ols_model(design_res, y_train=y, allow_rank_deficient=False)
+
+
+def test_rank_deficiency_prediction_only_mode():
+    """
+    Verify that when allow_rank_deficient=True is explicitly set, the model trains in
+    prediction-only mode: standard hypothesis tests and CIs are masked as N/A.
+    """
+    np.random.seed(42)
+    n = 60
+    x1 = np.random.normal(0, 1, n)
+    x2 = np.random.normal(0, 1, n)
+    x3 = x1 + x2  # Exact collinearity
+    X = pd.DataFrame({"x1": x1, "x2": x2, "x3": x3})
+    y = pd.Series(2.0 + 3.0 * x1 - 1.0 * x2 + np.random.normal(0, 0.1, n), name="y")
+
+    design_res, _ = build_ols_design_matrices(X, selected_features=["x1", "x2", "x3"], fit_intercept=True)
+    model = fit_ols_model(design_res, y_train=y, allow_rank_deficient=True)
+
+    assert not model.is_valid_for_inference
+    assert np.isnan(model.f_statistic)
+    assert np.isnan(model.f_pvalue)
+    assert model.train_metrics.adj_r2 is None
+
+    # Check that inferential statistics are masked in coef_table
+    df_coef = model.coef_table
+    for _, row in df_coef.iterrows():
+        assert "N/A" in str(row["Std. Error"])
+        assert "N/A" in str(row["t-statistic"])
+        assert "N/A" in str(row["p-value"])
+        assert "N/A" in str(row["CI Lower (95%)"])
+        assert "N/A" in str(row["CI Upper (95%)"])
+
+    # Predictions must still work
+    preds = model.train_predictions
+    assert len(preds) == n
+    assert not preds.isna().any()
+

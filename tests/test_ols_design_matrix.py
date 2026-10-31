@@ -209,3 +209,65 @@ def test_design_matrix_train_only_fit_guarantee():
 
     # Imputed value for missing x in val should be train median (20.0), NOT val median!
     assert X_val_des.iloc[2]["x"] == 20.0
+
+
+def test_design_matrix_interleaved_columns_contract():
+    """
+    Verify Task 3 Contract:
+    Interleaved numeric and categorical original predictors must preserve exact column order:
+    1. DesignMatrixMetadata.encoded_feature_names strictly matches list(X_train_design.columns).
+    2. Reconstructed Validation design matrix maintains identical column order.
+    3. Original-to-encoded and encoded-to-original mappings reflect correct layout.
+    """
+    train_df = pd.DataFrame({
+        "cat1": ["A", "B", "C", "A", "B", "C"],
+        "num1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        "cat2": ["X", "Y", "X", "Y", "X", "Y"],
+        "num2": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
+    })
+    val_df = pd.DataFrame({
+        "cat1": ["B", "C"],
+        "num1": [1.5, 2.5],
+        "cat2": ["Y", "X"],
+        "num2": [15.0, 25.0]
+    })
+
+    interleaved_features = ["cat1", "num1", "cat2", "num2"]
+    builder = OLSDesignMatrixBuilder(
+        selected_original_features=interleaved_features,
+        fit_intercept=True
+    )
+    builder.fit(train_df)
+    X_train_des = builder.transform(train_df)
+    X_val_des = builder.transform(val_df)
+    meta = builder.metadata
+
+    # 1. Exact match between X_train_des.columns and meta.encoded_feature_names
+    assert list(X_train_des.columns) == list(meta.encoded_feature_names)
+    assert list(X_val_des.columns) == list(meta.encoded_feature_names)
+
+    # 2. Interleaved ordering contract:
+    # First is 'const' (if fit_intercept=True)
+    # Then cat1 dummies (e.g. cat1_B, cat1_C)
+    # Then num1
+    # Then cat2 dummies (e.g. cat2_Y)
+    # Then num2
+    assert meta.encoded_feature_names[0] == "const"
+    assert "cat1" in meta.encoded_feature_names[1]
+    assert "num1" in meta.encoded_feature_names
+    assert "cat2_Y" in meta.encoded_feature_names
+    assert "num2" in meta.encoded_feature_names
+
+    idx_cat1 = [i for i, c in enumerate(meta.encoded_feature_names) if c.startswith("cat1_")]
+    idx_num1 = meta.encoded_feature_names.index("num1")
+    idx_cat2 = [i for i, c in enumerate(meta.encoded_feature_names) if c.startswith("cat2_")]
+    idx_num2 = meta.encoded_feature_names.index("num2")
+
+    assert max(idx_cat1) < idx_num1 < min(idx_cat2) < idx_num2
+
+    # 3. Mappings check
+    assert meta.original_to_encoded_mapping["num1"] == ["num1"]
+    assert meta.original_to_encoded_mapping["num2"] == ["num2"]
+    assert meta.original_to_encoded_mapping["cat1"] == ["cat1_B", "cat1_C"]
+    assert meta.original_to_encoded_mapping["cat2"] == ["cat2_Y"]
+

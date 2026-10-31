@@ -79,30 +79,45 @@ def generate_regression_equation_text(
 
 
 def build_coefficient_table(
-    ols_res: Any,
+    params: pd.Series,
+    bse: pd.Series,
+    tvalues: pd.Series,
+    pvalues: pd.Series,
+    conf_int: pd.DataFrame,
     design_result: DesignMatrixResult,
-    scale_numeric: bool = False
+    scale_numeric: bool = False,
+    is_valid_for_inference: bool = True
 ) -> pd.DataFrame:
     """
     Construct comprehensive econometric coefficient summary table with interpretations.
+    When is_valid_for_inference=False, inference columns (SE, t, p, CI) are masked to prevent
+    presenting unidentifiable pseudoinverse artifacts as valid scientific inference.
     """
-    params = ols_res.params
-    bse = ols_res.bse
-    tvalues = ols_res.tvalues
-    pvalues = ols_res.pvalues
-    conf_int = ols_res.conf_int(alpha=0.05)
-
     ref_cats = design_result.metadata.reference_categories
     orig_to_enc = design_result.metadata.original_to_encoded_mapping
 
     rows = []
     for col in params.index:
         coef = float(params[col])
-        se = float(bse[col]) if col in bse and np.isfinite(bse[col]) else float("nan")
-        t_stat = float(tvalues[col]) if col in tvalues and np.isfinite(tvalues[col]) else float("nan")
-        p_val = float(pvalues[col]) if col in pvalues and np.isfinite(pvalues[col]) else float("nan")
-        ci_lower = float(conf_int.loc[col, 0]) if col in conf_int.index and np.isfinite(conf_int.loc[col, 0]) else float("nan")
-        ci_upper = float(conf_int.loc[col, 1]) if col in conf_int.index and np.isfinite(conf_int.loc[col, 1]) else float("nan")
+
+        if is_valid_for_inference:
+            se = float(bse[col]) if col in bse and np.isfinite(bse[col]) else float("nan")
+            t_stat = float(tvalues[col]) if col in tvalues and np.isfinite(tvalues[col]) else float("nan")
+            p_val = float(pvalues[col]) if col in pvalues and np.isfinite(pvalues[col]) else float("nan")
+            ci_lower = float(conf_int.loc[col, 0]) if col in conf_int.index and np.isfinite(conf_int.loc[col, 0]) else float("nan")
+            ci_upper = float(conf_int.loc[col, 1]) if col in conf_int.index and np.isfinite(conf_int.loc[col, 1]) else float("nan")
+
+            se_str = round(se, 4) if np.isfinite(se) else "N/A"
+            t_str = round(t_stat, 3) if np.isfinite(t_stat) else "N/A"
+            p_str = f"{p_val:.4e}" if (np.isfinite(p_val) and p_val < 1e-4) else (round(p_val, 4) if np.isfinite(p_val) else "N/A")
+            ci_low_str = round(ci_lower, 4) if np.isfinite(ci_lower) else "N/A"
+            ci_up_str = round(ci_upper, 4) if np.isfinite(ci_upper) else "N/A"
+        else:
+            se_str = "N/A (Rank Deficient)"
+            t_str = "N/A (Unidentifiable)"
+            p_str = "N/A (Unidentifiable)"
+            ci_low_str = "N/A"
+            ci_up_str = "N/A"
 
         # Contextual interpretation
         if col == "const":
@@ -129,11 +144,11 @@ def build_coefficient_table(
         rows.append({
             "Feature": col,
             "Coefficient": round(coef, 4),
-            "Std. Error": round(se, 4) if np.isfinite(se) else "N/A",
-            "t-statistic": round(t_stat, 3) if np.isfinite(t_stat) else "N/A",
-            "p-value": f"{p_val:.4e}" if (np.isfinite(p_val) and p_val < 1e-4) else (round(p_val, 4) if np.isfinite(p_val) else "N/A"),
-            "CI Lower (95%)": round(ci_lower, 4) if np.isfinite(ci_lower) else "N/A",
-            "CI Upper (95%)": round(ci_upper, 4) if np.isfinite(ci_upper) else "N/A",
+            "Std. Error": se_str,
+            "t-statistic": t_str,
+            "p-value": p_str,
+            "CI Lower (95%)": ci_low_str,
+            "CI Upper (95%)": ci_up_str,
             "Interpretation": interp
         })
 
@@ -148,10 +163,17 @@ def fit_ols_model(
     feature_source_id: str = "all_features",
     feature_source_label: str = "All Features Baseline",
     builder: Optional[OLSDesignMatrixBuilder] = None,
-    is_post_selection: bool = False
+    is_post_selection: bool = False,
+    allow_rank_deficient: bool = False
 ) -> OLSModelResult:
     """
     Fits Ordinary Least Squares regression via statsmodels and produces OLSModelResult.
+    
+    Parameters:
+        allow_rank_deficient: When False (default), raises ValueError if the design matrix
+            is rank-deficient or has non-positive residual degrees of freedom.
+            When True, fits OLS via pseudoinverse for prediction only, masking unidentifiable
+            inference statistics (standard errors, t-stats, p-values, CIs).
     """
     X_train_des = design_result.X_train_design
     metadata = design_result.metadata
@@ -161,37 +183,45 @@ def fit_ols_model(
 
     warnings_list = list(metadata.warnings)
 
-    if not metadata.is_full_rank:
+    # Backend guard for statistical inference validity
+    if not metadata.is_valid_for_inference:
+        dep_info = (
+            f"Linearly dependent column(s): {', '.join(metadata.collinear_columns)}."
+            if metadata.collinear_columns
+            else "Exact linear dependency or non-positive degrees of freedom."
+        )
+        if not allow_rank_deficient:
+            raise ValueError(
+                f"OLS statistical inference blocked: Design matrix is rank-deficient "
+                f"(matrix rank is {metadata.matrix_rank} for {metadata.num_parameters} columns, "
+                f"residual df={metadata.residual_degrees_of_freedom}). {dep_info} "
+                "Ordinary Least Squares requires full column rank to uniquely identify regression parameters. "
+                "Enable allow_rank_deficient=True for prediction-only mode."
+            )
         warnings_list.append(
-            "Design matrix is rank-deficient. statsmodels least squares will use a pseudoinverse; "
-            "individual coefficient significance tests (t-stats, p-values, standard errors) "
-            "are not uniquely identifiable."
+            "⚠️ Prediction-Only Mode: Design matrix is rank-deficient. Standard errors, t-statistics, "
+            "p-values, and confidence intervals are omitted because parameters are not uniquely identifiable."
         )
 
-    # Fit statsmodels OLS
+    # Fit statsmodels OLS without monkey-patching statsmodels objects
     try:
-        model = sm.OLS(y_train.values, X_train_des.values)
+        y_train_s = pd.Series(y_train.values, name=target_name)
+        X_train_df = pd.DataFrame(X_train_des.values, columns=X_train_des.columns)
+        model = sm.OLS(y_train_s, X_train_df)
         ols_res = model.fit()
     except Exception as e:
         raise RuntimeError(f"statsmodels OLS fitting failed: {e}")
 
-    # Wrap parameters with column names
+    # Named Series / DataFrame wrapper for display formatting
     params_series = pd.Series(ols_res.params, index=X_train_des.columns)
     bse_series = pd.Series(ols_res.bse, index=X_train_des.columns)
     tval_series = pd.Series(ols_res.tvalues, index=X_train_des.columns)
     pval_series = pd.Series(ols_res.pvalues, index=X_train_des.columns)
 
-    # Invert conf_int indexing if necessary
     try:
         ci_df = pd.DataFrame(ols_res.conf_int(alpha=0.05), index=X_train_des.columns)
     except Exception:
         ci_df = pd.DataFrame(np.nan, index=X_train_des.columns, columns=[0, 1])
-
-    ols_res.params = params_series
-    ols_res.bse = bse_series
-    ols_res.tvalues = tval_series
-    ols_res.pvalues = pval_series
-    ols_res.conf_int = lambda alpha=0.05: ci_df
 
     # Generate equation representations
     general_eq, fitted_eq = generate_regression_equation_latex(
@@ -205,11 +235,16 @@ def fit_ols_model(
         fit_intercept=metadata.fit_intercept
     )
 
-    # Build coefficient summary table
+    # Build coefficient summary table with explicit inference validity guard
     coef_table = build_coefficient_table(
-        ols_res=ols_res,
+        params=params_series,
+        bse=bse_series,
+        tvalues=tval_series,
+        pvalues=pval_series,
+        conf_int=ci_df,
         design_result=design_result,
-        scale_numeric=metadata.scaling_applied
+        scale_numeric=metadata.scaling_applied,
+        is_valid_for_inference=metadata.is_valid_for_inference
     )
 
     # In-sample predictions and metrics
@@ -222,7 +257,8 @@ def fit_ols_model(
         y_pred=train_preds,
         num_non_intercept_parameters=p_slopes,
         split_name="Train",
-        is_in_sample=True
+        is_in_sample=True,
+        fit_intercept=metadata.fit_intercept
     )
 
     # Validation predictions and metrics
@@ -235,10 +271,10 @@ def fit_ols_model(
             y_pred=val_preds,
             num_non_intercept_parameters=p_slopes,
             split_name="Validation",
-            is_in_sample=False
+            is_in_sample=False,
+            fit_intercept=metadata.fit_intercept
         )
     else:
-        # Fallback dummy metrics if validation data was not supplied
         val_metrics = RegressionMetrics(
             split_name="Validation",
             sample_count=0,
@@ -251,9 +287,16 @@ def fit_ols_model(
             notes="No validation set supplied."
         )
 
-    # Statistical summary values from statsmodels
-    f_stat = float(ols_res.fvalue) if np.isfinite(ols_res.fvalue) else float("nan")
-    f_pval = float(ols_res.f_pvalue) if np.isfinite(ols_res.f_pvalue) else float("nan")
+    # Statistical summary values from statsmodels (guard invalid F-stat under rank deficiency)
+    if metadata.is_valid_for_inference:
+        f_stat = float(ols_res.fvalue) if np.isfinite(ols_res.fvalue) else float("nan")
+        f_pval = float(ols_res.f_pvalue) if np.isfinite(ols_res.f_pvalue) else float("nan")
+        adj_r2_val = float(ols_res.rsquared_adj) if np.isfinite(ols_res.rsquared_adj) else None
+    else:
+        f_stat = float("nan")
+        f_pval = float("nan")
+        adj_r2_val = None
+        train_metrics.adj_r2 = None
     llf = float(ols_res.llf) if np.isfinite(ols_res.llf) else float("nan")
     aic_val = float(ols_res.aic) if np.isfinite(ols_res.aic) else float("nan")
     bic_val = float(ols_res.bic) if np.isfinite(ols_res.bic) else float("nan")
@@ -300,7 +343,7 @@ def fit_ols_model(
         val_metrics=val_metrics,
         test_metrics=None,
         r2=float(ols_res.rsquared),
-        adj_r2=float(ols_res.rsquared_adj) if np.isfinite(ols_res.rsquared_adj) else None,
+        adj_r2=adj_r2_val,
         f_statistic=f_stat,
         f_pvalue=f_pval,
         log_likelihood=llf,
@@ -310,6 +353,7 @@ def fit_ols_model(
         df_resid=int(ols_res.df_resid),
         df_model=int(ols_res.df_model),
         post_selection_inference_warning=is_post_selection,
+        is_valid_for_inference=metadata.is_valid_for_inference,
         warnings=warnings_list,
         test_evaluation_status="untested",
         trained_timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
