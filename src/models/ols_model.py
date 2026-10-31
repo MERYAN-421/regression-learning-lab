@@ -354,6 +354,7 @@ def fit_ols_model(
         df_model=int(ols_res.df_model),
         post_selection_inference_warning=is_post_selection,
         is_valid_for_inference=metadata.is_valid_for_inference,
+        target_name=target_name,
         warnings=warnings_list,
         test_evaluation_status="untested",
         trained_timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

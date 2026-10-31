@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-FF4B4B.svg?style=flat&logo=Streamlit&logoColor=white)](https://streamlit.io/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Milestone-4%20Completed-success.svg)]()
+[![Status](https://img.shields.io/badge/Milestone-5%20Completed-success.svg)]()
 
 > **Interactive Multiple Linear Regression & Statistical Diagnostics Platform**  
 > An educational web platform designed for data science and statistics students to explore real-world regression modeling, feature selection, and the classical Gauss-Markov assumptions using curated Kaggle tabular datasets (14–39 features).
@@ -52,6 +52,14 @@
   - **Multicollinearity**: Variance Inflation Factor (VIF) on non-intercept regressors with auxiliary intercept, Matrix Condition Number, and QR rank diagnostics with King County structural identity demonstration.
   - **Exogeneity Educational Notice**: Transparently cautions students that strict exogeneity $E[\epsilon | X] = 0$ cannot be proven by residual diagnostics.
   - **Influence & Leverage Diagnostics**: Cook's Distance ($4/n$) and Hat Matrix Leverage ($2(p+1)/n$).
+- **Experiment & Model Comparison Laboratory (Milestone 5)**:
+  - **Model Compatibility Guard**: Rejects models from different datasets, splits, observation counts, or targets.
+  - **Validation-Only Model Leaderboard**: Strictly ranks development-stage models on out-of-sample Validation RMSE, MAE, R², parsimony, or generalization gap (Rule 2).
+  - **Multi-Metric Radar Chart**: Normalized spider chart mapping models across 5 performance dimensions onto $[0, 1]$; handles constants, single models, and negative R².
+  - **Prediction-Complexity Trade-Off**: Interactive Pareto frontier identifying non-dominated Occam's razor models (minimizing parameters and Validation RMSE).
+  - **Statistical Diagnostic Comparison Matrix**: Side-by-side display of Ramsey RESET, Durbin-Watson, Ljung-Box, Breusch-Pagan, Jarque-Bera, and Max VIF without artificial composite scoring (Rule 3).
+  - **Feature Selection Overlap & Stability**: Original feature binary inclusion matrix, pairwise Jaccard similarity, and selection frequency counts.
+  - **Candidate Selection & Audit Trail**: Allows modeler to record chosen candidate with tagged justification rationale, preparing structured artifacts for Milestone 6.
 
 ---
 
@@ -204,9 +212,11 @@ Open your browser and navigate to `http://localhost:8501`.
 | **0** | **Project Foundation** | Architecture, multi-page routing, light UI theme, documentation, tests, Git/GitHub setup | ✅ **Completed** |
 | **1** | **Dataset & Data Engine** | Working Dataset Library, schema validation, profiling, and Random/Temporal/Group splits | ✅ **Completed** |
 | **2** | **EDA & Feature Selection** | Interactive EDA Lab, 8 group-aware selection methods, leakage-free CV, experiment comparison | ✅ **Completed** |
-| **3** | **Regression & Evaluation** | statsmodels OLS fitting, econometric summary table, LaTeX equations, MSE/RMSE/R² | ⏳ Next Up |
-| **4** | **Assumption Diagnostics** | Five Gauss-Markov diagnostic tests, residual plots, Cook's distance, leverage | ⏳ Scheduled |
-| **5** | **Comparison & Reporting** | Side-by-side experiment comparison, radar plots, exportable lab reports | ⏳ Scheduled |
+| **3** | **Regression & Evaluation** | statsmodels OLS fitting, econometric summary table, LaTeX equations, MSE/RMSE/R² | ✅ **Completed** |
+| **4** | **Assumption Diagnostics** | Five Gauss-Markov diagnostic tests, residual plots, Cook's distance, leverage | ✅ **Completed** |
+| **5** | **Experiment & Model Comparison** | Validation-based leaderboard, radar charts, Pareto complexity frontier, diagnostic matrix, feature overlap, candidate selection | ✅ **Completed** |
+| **6** | **Report Generation** | Automated academic laboratory report generator, executive summary synthesis, Markdown/HTML export | ⏳ Scheduled |
+| **7** | **Deployment & Final Verification** | Cloud deployment verification, end-to-end integration audit, and final platform release | ⏳ Scheduled |
 
 ---
 

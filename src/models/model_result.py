@@ -46,6 +46,8 @@ class OLSModelResult:
     df_model: int
     post_selection_inference_warning: bool
     is_valid_for_inference: bool = True
+    target_name: str = "target"
+    target_unit: Optional[str] = None
     warnings: List[str] = field(default_factory=list)
     test_evaluation_status: str = "untested"  # "untested", "evaluated_train_only", "evaluated_train_val_refit"
     test_refit_policy: Optional[str] = None  # "train_val" or "train_only"

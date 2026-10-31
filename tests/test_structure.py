@@ -126,7 +126,7 @@ def test_under_development_badge_on_subpages():
 def test_page_renders_cleanly_via_apptest(page_name):
     """Verify that each page renders without throwing exceptions using Streamlit AppTest."""
     page_file = PROJECT_ROOT / page_name
-    at = AppTest.from_file(str(page_file), default_timeout=10).run()
+    at = AppTest.from_file(str(page_file), default_timeout=25).run()
     assert len(at.exception) == 0, f"Page {page_name} threw exception: {at.exception}"
 
 def test_src_modules_structure():

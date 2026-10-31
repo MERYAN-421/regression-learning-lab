@@ -16,6 +16,7 @@ def train_ols_experiment(
     split_result: SplitResult,
     feature_source: Union[str, FeatureSelectionResult] = "all_features",
     target_name: str = "target",
+    target_unit: Optional[str] = None,
     fit_intercept: bool = True,
     scale_numeric: bool = False,
     dataset_id: str = "dataset",
@@ -65,6 +66,11 @@ def train_ols_experiment(
         source_id = feature_source.experiment_id
         source_label = f"{feature_source.method_name} (K={feature_source.selected_original_count})"
         is_post_selection = True
+    elif isinstance(feature_source, (list, tuple, set)):
+        selected_original_features = list(feature_source)
+        source_id = f"custom_subset_{len(selected_original_features)}"
+        source_label = f"Selected Features (K={len(selected_original_features)})"
+        is_post_selection = True
     else:
         raise TypeError(f"Unsupported feature_source type: {type(feature_source)}")
 
@@ -93,5 +99,6 @@ def train_ols_experiment(
         is_post_selection=is_post_selection,
         allow_rank_deficient=allow_rank_deficient
     )
+    model_result.target_unit = target_unit
 
     return model_result
