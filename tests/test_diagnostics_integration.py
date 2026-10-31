@@ -145,6 +145,98 @@ def test_diagnostic_suite_aggregation_and_summary(integration_split_fixture):
     assert "Multicollinearity" in categories
 
 
+def test_split_validation_rejects_identical_count_different_split_or_shuffled_rows(integration_split_fixture):
+    """
+    Task 1 verification:
+    Verify that run_full_diagnostic_suite rejects:
+    1. A different split with identical sample count (split fingerprint mismatch).
+    2. A split with identical rows but permuted / shuffled index alignment.
+    """
+    import copy
+    split = integration_split_fixture
+    model = train_ols_experiment(split, "all_features", fit_intercept=True)
+
+    # 1. Different split with identical sample count (60 rows)
+    split_diff_fp = copy.deepcopy(split)
+    split_diff_fp.split_fingerprint = "different_split_fp_999"
+    with pytest.raises(ValueError, match="Split fingerprint mismatch"):
+        run_full_diagnostic_suite(model, split_result=split_diff_fp)
+
+    # 2. Shuffled row alignment
+    split_shuffled = copy.deepcopy(split)
+    shuffled_idx = split.y_train.sample(frac=1.0, random_state=123).index
+    split_shuffled.X_train = split.X_train.reindex(shuffled_idx)
+    split_shuffled.y_train = split.y_train.reindex(shuffled_idx)
+    with pytest.raises(ValueError, match="alignment error"):
+        run_full_diagnostic_suite(model, split_result=split_shuffled)
+
+
+def test_suite_configurations_remain_distinct(integration_split_fixture):
+    """
+    Task 2 verification:
+    Verify that varying alpha, RESET powers, and Ljung-Box lags produces distinct
+    deterministic Suite IDs and configuration dictionaries.
+    """
+    split = integration_split_fixture
+    model = train_ols_experiment(split, "all_features", fit_intercept=True)
+
+    suite_default = run_full_diagnostic_suite(model, split_result=split, alpha=0.05, reset_powers=[2, 3])
+    suite_alpha01 = run_full_diagnostic_suite(model, split_result=split, alpha=0.01, reset_powers=[2, 3])
+    suite_powers = run_full_diagnostic_suite(model, split_result=split, alpha=0.05, reset_powers=[2, 3, 4], ljung_box_lag=8)
+
+    assert suite_default.suite_id != suite_alpha01.suite_id
+    assert suite_default.suite_id != suite_powers.suite_id
+    assert suite_alpha01.suite_id != suite_powers.suite_id
+
+    assert suite_default.configuration["alpha"] == 0.05
+    assert suite_alpha01.configuration["alpha"] == 0.01
+    assert suite_powers.configuration["reset_powers"] == [2, 3, 4]
+    assert suite_powers.configuration["ljung_box_lag"] == 8
+
+
+def test_diagnostic_suite_json_export_preserves_numeric_details(integration_split_fixture):
+    """
+    Task 4 verification:
+    Verify that JSON export safely preserves all numeric details, degrees of freedom,
+    VIF details, and configuration metadata without NaN corruption.
+    """
+    import json
+    split = integration_split_fixture
+    model = train_ols_experiment(split, "all_features", fit_intercept=True)
+
+    suite = run_full_diagnostic_suite(
+        model,
+        split_result=split,
+        alpha=0.05,
+        reset_powers=[2, 3],
+        ljung_box_lag=5,
+        include_white=True,
+        include_shapiro=True,
+        include_influence=True
+    )
+
+    json_str = suite.to_json(indent=2)
+    assert isinstance(json_str, str)
+    parsed = json.loads(json_str)
+
+    assert parsed["suite_id"] == suite.suite_id
+    assert parsed["model_id"] == model.model_id
+    assert parsed["configuration"]["alpha"] == 0.05
+    assert parsed["configuration"]["reset_powers"] == [2, 3]
+
+    # Check Ramsey RESET details preserved
+    reset_data = parsed["diagnostics"]["ramsey_reset"]
+    assert "df_num" in reset_data["details"]
+    assert "df_denom" in reset_data["details"]
+
+    # Check VIF details preserved
+    vif_data = parsed["diagnostics"]["multicollinearity_vif"]
+    assert "vif_table" in vif_data["details"]
+    assert isinstance(vif_data["details"]["vif_table"], list)
+    assert len(vif_data["details"]["vif_table"]) > 0
+
+
+
 # =====================================================================
 # Group H: Streamlit AppTest Page Rendering
 # =====================================================================

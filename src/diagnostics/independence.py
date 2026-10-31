@@ -85,18 +85,41 @@ def run_durbin_watson_test(
     config = {"method": "durbin_watson"}
     diag_id, repro_hash = generate_diagnostic_id(model_result.model_id, "durbin_watson", config)
 
+    # Validate provided split_result
+    if split_result is not None:
+        if split_result.split_fingerprint and model_result.split_fingerprint and split_result.split_fingerprint != model_result.split_fingerprint:
+            raise ValueError(
+                f"Split fingerprint mismatch: Model split '{model_result.split_fingerprint[:8]}' "
+                f"does not match SplitResult '{split_result.split_fingerprint[:8]}'."
+            )
+        if len(split_result.y_train) != len(model_result.train_predictions):
+            raise ValueError(
+                f"Training count mismatch: Model has {len(model_result.train_predictions)} predictions, "
+                f"but SplitResult has {len(split_result.y_train)} rows."
+            )
+        if not split_result.y_train.index.equals(model_result.train_predictions.index):
+            raise ValueError(
+                "Training observation alignment error: split_result.y_train index does not match model_result.train_predictions index."
+            )
+
     # Determine applicability
     app_status, app_reason = _check_independence_applicability(
         dataset_id=model_result.dataset_id,
         split_result=split_result
     )
 
-    y_train = split_result.y_train if split_result is not None else None
-    if y_train is not None and len(y_train) == len(model_result.train_predictions):
-        residuals = y_train.values - model_result.train_predictions.values
+    if split_result is not None and split_result.y_train is not None:
+        residuals = (split_result.y_train.values - model_result.train_predictions.values).copy()
     else:
-        # Fallback to statsmodels resid
-        residuals = model_result.fitted_model.resid.values
+        residuals = model_result.fitted_model.resid.values.copy()
+
+    # Ensure temporal residuals are ordered chronologically before sequential diagnostics
+    if split_result is not None and (split_result.strategy == "temporal" or split_result.timestamps_train is not None):
+        if split_result.timestamps_train is not None and len(split_result.timestamps_train) == len(residuals):
+            ts = pd.to_datetime(split_result.timestamps_train)
+            if not ts.is_monotonic_increasing:
+                chronological_order = np.argsort(ts.values)
+                residuals = residuals[chronological_order]
 
     # Check for non-applicability
     if app_status == ApplicabilityStatus.NOT_APPLICABLE:
@@ -198,6 +221,7 @@ def run_durbin_watson_test(
 def run_ljung_box_test(
     model_result: OLSModelResult,
     split_result: Optional[SplitResult] = None,
+    lags: Optional[int] = None,
     max_lag: Optional[int] = None,
     alpha: float = 0.05
 ) -> DiagnosticResult:
@@ -207,9 +231,26 @@ def run_ljung_box_test(
     H0: Autocorrelations up to lag m are jointly zero (errors are white noise).
     H1: At least one autocorrelation up to lag m is non-zero.
     
-    Lag rule: If max_lag is None, uses default rule min(10, max(1, n // 10)).
+    Lag rule: If lags/max_lag is None, uses default rule min(10, max(1, n // 10)).
     """
     start_time = time.time()
+
+    # Validate provided split_result
+    if split_result is not None:
+        if split_result.split_fingerprint and model_result.split_fingerprint and split_result.split_fingerprint != model_result.split_fingerprint:
+            raise ValueError(
+                f"Split fingerprint mismatch: Model split '{model_result.split_fingerprint[:8]}' "
+                f"does not match SplitResult '{split_result.split_fingerprint[:8]}'."
+            )
+        if len(split_result.y_train) != len(model_result.train_predictions):
+            raise ValueError(
+                f"Training count mismatch: Model has {len(model_result.train_predictions)} predictions, "
+                f"but SplitResult has {len(split_result.y_train)} rows."
+            )
+        if not split_result.y_train.index.equals(model_result.train_predictions.index):
+            raise ValueError(
+                "Training observation alignment error: split_result.y_train index does not match model_result.train_predictions index."
+            )
 
     # Determine applicability
     app_status, app_reason = _check_independence_applicability(
@@ -217,19 +258,27 @@ def run_ljung_box_test(
         split_result=split_result
     )
 
-    y_train = split_result.y_train if split_result is not None else None
-    if y_train is not None and len(y_train) == len(model_result.train_predictions):
-        residuals = y_train.values - model_result.train_predictions.values
+    if split_result is not None and split_result.y_train is not None:
+        residuals = (split_result.y_train.values - model_result.train_predictions.values).copy()
     else:
-        residuals = model_result.fitted_model.resid.values
+        residuals = model_result.fitted_model.resid.values.copy()
+
+    # Ensure temporal residuals are ordered chronologically before sequential diagnostics
+    if split_result is not None and (split_result.strategy == "temporal" or split_result.timestamps_train is not None):
+        if split_result.timestamps_train is not None and len(split_result.timestamps_train) == len(residuals):
+            ts = pd.to_datetime(split_result.timestamps_train)
+            if not ts.is_monotonic_increasing:
+                chronological_order = np.argsort(ts.values)
+                residuals = residuals[chronological_order]
 
     n_obs = len(residuals)
 
     # Resolve lag configuration according to documented statistical rules
-    if max_lag is None or max_lag <= 0:
+    chosen_lag = lags if lags is not None else max_lag
+    if chosen_lag is None or chosen_lag <= 0:
         resolved_lag = min(10, max(1, n_obs // 10))
     else:
-        resolved_lag = min(max_lag, max(1, n_obs - 2))
+        resolved_lag = min(chosen_lag, max(1, n_obs - 2))
 
     config = {"max_lag": resolved_lag, "alpha": alpha}
     diag_id, repro_hash = generate_diagnostic_id(model_result.model_id, "ljung_box", config)

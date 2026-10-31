@@ -79,7 +79,7 @@ class DiagnosticResult:
     reproducibility_hash: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert diagnostic result to a JSON-serializable dictionary."""
+        """Convert diagnostic result to a JSON-serializable dictionary with safe numeric handling."""
         return {
             "diagnostic_id": self.diagnostic_id,
             "model_id": self.model_id,
@@ -94,19 +94,20 @@ class DiagnosticResult:
             "null_hypothesis": self.null_hypothesis,
             "alternative_hypothesis": self.alternative_hypothesis,
             "statistic_name": self.statistic_name,
-            "statistic_value": self.statistic_value,
-            "p_value": self.p_value,
+            "statistic_value": safe_serialize_numeric(self.statistic_value),
+            "p_value": safe_serialize_numeric(self.p_value),
             "alpha": self.alpha,
             "decision": self.decision,
             "applicability_status": self.applicability_status,
             "applicability_reason": self.applicability_reason,
             "assumptions_prerequisites": self.assumptions_prerequisites,
+            "details": safe_serialize_numeric(self.details),
             "interpretation": self.interpretation,
             "limitations": self.limitations,
             "recommendations": self.recommendations,
             "warnings": self.warnings,
             "runtime_seconds": self.runtime_seconds,
-            "configuration": self.configuration,
+            "configuration": safe_serialize_numeric(self.configuration),
             "reproducibility_hash": self.reproducibility_hash
         }
 
@@ -115,6 +116,7 @@ class DiagnosticResult:
 class DiagnosticSuiteResult:
     """
     Aggregated artifact containing all diagnostics executed for an OLS model specification.
+    Maintains full configuration metadata and safe JSON serialization.
     Methodological note: An individual suite CANNOT prove all assumptions hold.
     """
     suite_id: str
@@ -126,6 +128,7 @@ class DiagnosticSuiteResult:
     alpha: float = 0.05
     timestamp: str = ""
     warnings: List[str] = field(default_factory=list)
+    configuration: Dict[str, Any] = field(default_factory=dict)
 
     def add_result(self, result: DiagnosticResult) -> None:
         """Register a diagnostic result into the suite."""
@@ -142,7 +145,9 @@ class DiagnosticSuiteResult:
         """
         rows = []
         for r in self.diagnostics.values():
-            stat_str = f"{r.statistic_value:.4f}" if (r.statistic_value is not None and not (isinstance(r.statistic_value, float) and (r.statistic_value != r.statistic_value))) else "N/A"
+            stat_val = r.statistic_value
+            is_nan = stat_val is None or (isinstance(stat_val, float) and (stat_val != stat_val))
+            stat_str = f"{stat_val:.4f}" if not is_nan else "N/A"
             pval_str = f"{r.p_value:.4f}" if r.p_value is not None else "N/A"
             rows.append({
                 "Category": r.diagnostic_type.capitalize(),
@@ -155,6 +160,55 @@ class DiagnosticSuiteResult:
             })
         return rows
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the entire suite to a JSON-serializable dictionary."""
+        return {
+            "suite_id": self.suite_id,
+            "model_id": self.model_id,
+            "dataset_id": self.dataset_id,
+            "dataset_fingerprint": self.dataset_fingerprint,
+            "split_fingerprint": self.split_fingerprint,
+            "alpha": self.alpha,
+            "timestamp": self.timestamp,
+            "warnings": self.warnings,
+            "configuration": safe_serialize_numeric(self.configuration),
+            "diagnostics": {k: res.to_dict() for k, res in self.diagnostics.items()}
+        }
+
+    def to_json(self, indent: int = 2) -> str:
+        """Serialize suite to a formatted JSON string."""
+        return json.dumps(self.to_dict(), indent=indent, default=str)
+
+
+def safe_serialize_numeric(val: Any) -> Any:
+    """
+    Recursively converts NumPy scalars, DataFrames, Series, and non-finite numbers
+    into standard JSON-compliant Python primitives.
+    """
+    import numpy as np
+    import pandas as pd
+
+    if val is None:
+        return None
+    elif isinstance(val, (bool, np.bool_)):
+        return bool(val)
+    elif isinstance(val, (int, np.integer)):
+        return int(val)
+    elif isinstance(val, (float, np.floating)):
+        if np.isnan(val) or not np.isfinite(val):
+            return None
+        return float(val)
+    elif isinstance(val, (np.ndarray, list, tuple)):
+        return [safe_serialize_numeric(item) for item in val]
+    elif isinstance(val, pd.DataFrame):
+        return [safe_serialize_numeric(row) for row in val.to_dict(orient="records")]
+    elif isinstance(val, pd.Series):
+        return safe_serialize_numeric(val.to_dict())
+    elif isinstance(val, dict):
+        return {str(k): safe_serialize_numeric(v) for k, v in val.items()}
+    else:
+        return str(val)
+
 
 def generate_diagnostic_id(
     model_id: str,
@@ -162,6 +216,6 @@ def generate_diagnostic_id(
     config: Dict[str, Any]
 ) -> Tuple[str, str]:
     """Generate a deterministic identifier and reproducibility hash for a diagnostic."""
-    raw_str = f"{model_id}:{method_id}:{json.dumps(config, sort_keys=True)}"
+    raw_str = f"{model_id}:{method_id}:{json.dumps(safe_serialize_numeric(config), sort_keys=True)}"
     h = hashlib.sha256(raw_str.encode("utf-8")).hexdigest()[:12]
     return f"diag_{method_id}_{h}", h

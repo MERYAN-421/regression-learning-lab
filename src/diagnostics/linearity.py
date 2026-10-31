@@ -150,6 +150,8 @@ def run_ramsey_reset_test(
         details = {
             "f_statistic": f_stat,
             "p_value": p_val,
+            "df_num": float(df_num),
+            "df_denom": float(df_denom),
             "df_numerator": float(df_num),
             "df_denominator": float(df_denom),
             "tested_powers": powers,

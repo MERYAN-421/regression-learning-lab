@@ -157,27 +157,49 @@ with col_ctrl1:
         help="Type I error tolerance. A smaller alpha (0.01) makes rejecting H0 more conservative.",
         key="diag_alpha_select"
     )
+    reset_power_option = st.selectbox(
+        "Ramsey RESET Polynomial Powers:",
+        options=["Powers [2, 3] (Standard)", "Powers [2, 3, 4] (Extended)", "Power [2] (Quadratic only)"],
+        index=0,
+        help="Polynomial powers of fitted values added to test specification."
+    )
+    if "Powers [2, 3, 4]" in reset_power_option:
+        chosen_powers = [2, 3, 4]
+    elif "Power [2]" in reset_power_option:
+        chosen_powers = [2]
+    else:
+        chosen_powers = [2, 3]
 
 with col_ctrl2:
+    lb_lag_input = st.number_input(
+        "Ljung-Box Maximum Lag (0 = Auto Rule):",
+        min_value=0,
+        max_value=50,
+        value=0,
+        step=1,
+        help="0 uses the standard rule min(10, max(1, n // 10)). Specify a positive integer for explicit lag."
+    )
+    chosen_lag = None if lb_lag_input == 0 else int(lb_lag_input)
+
     opt_white = st.checkbox(
         "Include White's General Test",
         value=False,
         help="Evaluates general non-linear heteroscedasticity using squares and cross-products. In high dimensions, degrees of freedom may be exhausted."
     )
+
+with col_ctrl3:
     opt_shapiro = st.checkbox(
         "Include Shapiro-Wilk Test",
         value=False,
         help="Performs Shapiro-Wilk normality test for n <= 5,000 observations."
     )
-
-with col_ctrl3:
     opt_influence = st.checkbox(
         "Include Influence & Leverage Diagnostics",
         value=True,
         help="Computes Cook's distance, hat matrix leverage, and studentized residuals."
     )
 
-# Session state diagnostic suite storage
+# Session state diagnostic suite storage keyed by Suite ID
 if "diagnostic_suites" not in st.session_state:
     st.session_state["diagnostic_suites"] = {}
 
@@ -189,19 +211,38 @@ if btn_run_diagnostics:
             model_result=active_model,
             split_result=split_res,
             alpha=alpha_choice,
+            reset_powers=chosen_powers,
+            ljung_box_lag=chosen_lag,
             include_white=opt_white,
             include_shapiro=opt_shapiro,
-            include_influence=opt_influence
+            include_influence=opt_influence,
+            data_scope="train_only"
         )
-        st.session_state["diagnostic_suites"][active_model.model_id] = suite_res
-        st.success(f"✅ Diagnostic suite completed for model `{active_model.model_id}` at α = {alpha_choice:.2f}!")
+        st.session_state["diagnostic_suites"][suite_res.suite_id] = suite_res
+        st.session_state["active_suite_id"] = suite_res.suite_id
+        st.success(f"✅ Diagnostic Suite `{suite_res.suite_id}` completed for model `{active_model.model_id}` at α = {alpha_choice:.2f}!")
 
-# Retrieve cached suite if available
-cached_suite: Optional[DiagnosticSuiteResult] = st.session_state["diagnostic_suites"].get(active_model.model_id, None)
+# Retrieve available suites for the active model
+available_suites = {
+    s.suite_id: f"{s.suite_id} (α={s.alpha}, RESET={s.configuration.get('reset_powers', [2,3])}, Lag={s.configuration.get('ljung_box_lag') or 'auto'})"
+    for s in st.session_state["diagnostic_suites"].values()
+    if s.model_id == active_model.model_id
+}
 
-if cached_suite is None:
+if not available_suites:
     st.info("👆 Click **Run Statistical Assumption Diagnostics** to compute formal hypothesis tests and diagnostic plots.")
     st.stop()
+
+# Suite selector if multiple configurations have been run
+selected_suite_id = st.selectbox(
+    "Active Diagnostic Suite Configuration Run:",
+    options=list(available_suites.keys()),
+    format_func=lambda sid: available_suites[sid],
+    index=list(available_suites.keys()).index(st.session_state.get("active_suite_id", list(available_suites.keys())[-1])),
+    key="select_active_suite_id"
+)
+
+cached_suite: DiagnosticSuiteResult = st.session_state["diagnostic_suites"][selected_suite_id]
 
 st.divider()
 
@@ -354,20 +395,9 @@ st.markdown(
 )
 
 # Export JSON capability
-suite_export = {
-    "suite_id": cached_suite.suite_id,
-    "model_id": cached_suite.model_id,
-    "dataset_id": cached_suite.dataset_id,
-    "dataset_fingerprint": cached_suite.dataset_fingerprint,
-    "split_fingerprint": cached_suite.split_fingerprint,
-    "alpha": cached_suite.alpha,
-    "timestamp": cached_suite.timestamp,
-    "diagnostics": {k: v.to_dict() for k, v in cached_suite.diagnostics.items()}
-}
-
 st.download_button(
     "📥 Export Full Diagnostic Suite (JSON)",
-    data=pd.Series([suite_export]).to_json(orient="records", indent=2),
-    file_name=f"diagnostics_{active_model.model_id}.json",
+    data=cached_suite.to_json(indent=2),
+    file_name=f"diagnostics_{cached_suite.suite_id}.json",
     mime="application/json"
 )

@@ -28,11 +28,12 @@ def validate_active_model_for_diagnostics(
     model: Optional[OLSModelResult],
     current_dataset_id: str,
     current_dataset_fingerprint: str = "",
-    current_split_fingerprint: str = ""
+    current_split_fingerprint: str = "",
+    split_result: Optional[SplitResult] = None
 ) -> Tuple[bool, str]:
     """
     Validates whether the active model is compatible with the current dataset and split state.
-    Blocks diagnostics execution if stale, mismatched, or incomplete.
+    Blocks diagnostics execution if stale, mismatched, misaligned, or incomplete.
     """
     if model is None:
         return (
@@ -78,6 +79,28 @@ def validate_active_model_for_diagnostics(
             f"Model '{model.model_id}' lacks training residual/prediction vectors."
         )
 
+    # Validate provided SplitResult alignment and compatibility
+    if split_result is not None:
+        if split_result.split_fingerprint and model.split_fingerprint and split_result.split_fingerprint != model.split_fingerprint:
+            return (
+                False,
+                f"Split fingerprint mismatch: Model split fingerprint '{model.split_fingerprint[:8]}' "
+                f"does not match provided SplitResult fingerprint '{split_result.split_fingerprint[:8]}'."
+            )
+
+        if len(split_result.y_train) != len(model.train_predictions):
+            return (
+                False,
+                f"Training observation count mismatch: Model has {len(model.train_predictions)} predictions, "
+                f"but provided SplitResult has {len(split_result.y_train)} rows."
+            )
+
+        if not split_result.y_train.index.equals(model.train_predictions.index):
+            return (
+                False,
+                "Training observation alignment error: split_result.y_train index does not match model train_predictions index."
+            )
+
     return True, "Model is valid and aligned with active dataset split."
 
 
@@ -85,28 +108,56 @@ def run_full_diagnostic_suite(
     model_result: OLSModelResult,
     split_result: Optional[SplitResult] = None,
     alpha: float = 0.05,
+    reset_powers: Optional[List[int]] = None,
+    ljung_box_lag: Optional[int] = None,
     include_white: bool = False,
     include_shapiro: bool = False,
-    include_influence: bool = True
+    include_influence: bool = True,
+    data_scope: str = "train_only"
 ) -> DiagnosticSuiteResult:
     """
     Executes the complete battery of econometric assumption diagnostics for a fitted OLS model.
+    Enforces compatibility and observation alignment checks itself prior to execution.
     Evaluates:
-    1. Linearity: Ramsey RESET test
-    2. Independence: Durbin-Watson statistic, Ljung-Box test
+    1. Linearity: Ramsey RESET test (configurable powers)
+    2. Independence: Durbin-Watson statistic, Ljung-Box test (configurable lags)
     3. Homoscedasticity: Breusch-Pagan test (and optional White test)
     4. Normality: Jarque-Bera test (and optional Shapiro-Wilk test)
     5. Multicollinearity: VIF on all non-intercept regressors, Condition Number, Rank
     6. Influence: Cook's Distance and Leverage (optional extension)
     """
-    raw_hash_tokens = [
-        model_result.model_id,
-        str(alpha),
-        str(include_white),
-        str(include_shapiro),
-        str(include_influence)
-    ]
-    suite_id = "suite_" + hashlib.sha256("||".join(raw_hash_tokens).encode("utf-8")).hexdigest()[:12]
+    # Self-enforcing model and split validation
+    is_valid, err_msg = validate_active_model_for_diagnostics(
+        model=model_result,
+        current_dataset_id=model_result.dataset_id,
+        current_dataset_fingerprint=model_result.dataset_fingerprint,
+        current_split_fingerprint=model_result.split_fingerprint,
+        split_result=split_result
+    )
+    if not is_valid:
+        raise ValueError(f"Diagnostic compatibility validation failed: {err_msg}")
+
+    actual_powers = sorted(reset_powers) if reset_powers is not None else [2, 3]
+
+    suite_config = {
+        "model_id": model_result.model_id,
+        "model_fingerprint": getattr(model_result, "split_fingerprint", ""),
+        "dataset_id": model_result.dataset_id,
+        "dataset_fingerprint": model_result.dataset_fingerprint,
+        "split_fingerprint": model_result.split_fingerprint,
+        "data_scope": data_scope,
+        "alpha": float(alpha),
+        "reset_powers": actual_powers,
+        "ljung_box_lag": int(ljung_box_lag) if ljung_box_lag is not None else None,
+        "include_white": bool(include_white),
+        "include_shapiro": bool(include_shapiro),
+        "include_influence": bool(include_influence),
+    }
+
+    import json
+    raw_hash_tokens = json.dumps(suite_config, sort_keys=True)
+    suite_hash = hashlib.sha256(raw_hash_tokens.encode("utf-8")).hexdigest()[:12]
+    suite_id = f"suite_{model_result.model_id}_{suite_hash}"
 
     suite = DiagnosticSuiteResult(
         suite_id=suite_id,
@@ -115,18 +166,19 @@ def run_full_diagnostic_suite(
         dataset_fingerprint=model_result.dataset_fingerprint,
         split_fingerprint=model_result.split_fingerprint,
         alpha=alpha,
-        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        configuration=suite_config
     )
 
     # 1. Linearity: Ramsey RESET
-    res_reset = run_ramsey_reset_test(model_result, powers=[2, 3], alpha=alpha)
+    res_reset = run_ramsey_reset_test(model_result, powers=actual_powers, alpha=alpha)
     suite.add_result(res_reset)
 
     # 2. Independence: Durbin-Watson & Ljung-Box
     res_dw = run_durbin_watson_test(model_result, split_result)
     suite.add_result(res_dw)
 
-    res_lb = run_ljung_box_test(model_result, split_result, alpha=alpha)
+    res_lb = run_ljung_box_test(model_result, split_result, lags=ljung_box_lag, alpha=alpha)
     suite.add_result(res_lb)
 
     # 3. Homoscedasticity: Breusch-Pagan (& optional White)

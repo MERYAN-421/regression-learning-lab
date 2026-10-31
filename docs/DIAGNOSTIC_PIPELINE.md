@@ -75,7 +75,8 @@ Before executing any diagnostic test, [`validate_active_model_for_diagnostics()`
 3. **Dataset Fingerprint**: Verifies that the dataset content hash matches `current_meta.dataset_fingerprint`.
 4. **Split Fingerprint**: Verifies that the partition hash matches `split_res.split_fingerprint`.
 5. **statsmodels Wrapper Availability**: Verifies `model.fitted_model` is accessible for residual retrieval.
-6. **Residual Vector Alignment**: Verifies that `len(model.train_predictions) == len(split_res.y_train)`.
+6. **Residual Vector & Observation Index Alignment**: Verifies that `len(model.train_predictions) == len(split_res.y_train)` and `split_res.y_train.index.equals(model.train_predictions.index)`.
+7. **Suite ID Determinism**: Generates unique `suite_id` deterministically from model fingerprint, data scope, alpha, RESET powers, Ljung-Box lag, and enabled test toggles. History is tracked by Suite ID to allow comparing different diagnostic configurations.
 
 If any check fails, diagnostic execution is halted and the UI directs the user back to the appropriate prior laboratory.
 
