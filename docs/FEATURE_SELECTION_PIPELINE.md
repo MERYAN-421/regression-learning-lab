@@ -145,3 +145,16 @@ Runs with different CV folds, alpha penalties, or random seeds receive distinct 
 ### 4.3 Stale State Invalidation
 The `FeatureSelectionExperimentTracker` associates every run with the active `dataset_fingerprint` and `split_fingerprint`. If a user modifies split ratios, changes random seed, or switches datasets in `pages/dataset.py`, previous experiments are flagged as outdated, preventing cross-contamination.
 
+---
+
+## 5. Handoff to Milestone 3 Regression Modeling
+
+The `FeatureSelectionResult` serves as the canonical input to the Milestone 3 Ordinary Least Squares Modeling Laboratory:
+
+1. **Canonical Original Predictor Handoff**: Milestone 3 consumes the `selected_original_features` list (original domain variables, size $K$).
+2. **Re-encoding for Econometric Identifiability**: While Milestone 2 may encode all categories for predictive feature selection, Milestone 3 rebuilds the numerical design matrix using reference-category dummy encoding (`drop='first'`) to guarantee full column rank when an intercept is present.
+3. **Fingerprint Validation**: `train_ols_experiment()` verifies that `fs_result.split_fingerprint == split_result.split_fingerprint`, actively rejecting experiments derived from outdated splits.
+4. **Post-Selection Inference Notice**: Models trained on feature-selected subsets automatically display:
+   > *"Coefficient tests and confidence intervals are conventional OLS results conditional on the selected model. They do not automatically adjust for data-driven feature selection."*
+
+
