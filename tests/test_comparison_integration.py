@@ -336,7 +336,8 @@ def test_real_dataset_demo_appliances_energy():
         feature_source=top10,
         dataset_id=meta.id,
         dataset_fingerprint=ds_fp,
-        target_name=meta.target_column
+        target_name=meta.target_column,
+        target_unit=meta.target_unit
     )
 
     m_top5 = train_ols_experiment(
@@ -344,7 +345,8 @@ def test_real_dataset_demo_appliances_energy():
         feature_source=top5,
         dataset_id=meta.id,
         dataset_fingerprint=ds_fp,
-        target_name=meta.target_column
+        target_name=meta.target_column,
+        target_unit=meta.target_unit
     )
 
     # Run diagnostic suite on m_top10
@@ -356,7 +358,7 @@ def test_real_dataset_demo_appliances_energy():
         active_dataset_fingerprint=ds_fp,
         active_split_fingerprint=split.split_fingerprint,
         active_target_name=meta.target_column,
-        active_target_unit="Wh",
+        active_target_unit=meta.target_unit,
         diagnostic_suites={m_top10.model_id: suite_top10}
     )
 
@@ -387,7 +389,8 @@ def test_real_dataset_demo_kc_house_sales():
         feature_source=pruned_feats,
         dataset_id=meta.id,
         dataset_fingerprint=ds_fp,
-        target_name=meta.target_column
+        target_name=meta.target_column,
+        target_unit=meta.target_unit
     )
 
     # Model 2: Minimal 3 features
@@ -397,7 +400,8 @@ def test_real_dataset_demo_kc_house_sales():
         feature_source=min_feats,
         dataset_id=meta.id,
         dataset_fingerprint=ds_fp,
-        target_name=meta.target_column
+        target_name=meta.target_column,
+        target_unit=meta.target_unit
     )
 
     comp_res = run_model_comparison(
@@ -406,7 +410,7 @@ def test_real_dataset_demo_kc_house_sales():
         active_dataset_fingerprint=ds_fp,
         active_split_fingerprint=split.split_fingerprint,
         active_target_name=meta.target_column,
-        active_target_unit="USD"
+        active_target_unit=meta.target_unit
     )
 
     assert len(comp_res.leaderboard) == 2
@@ -451,7 +455,8 @@ def test_real_dataset_demo_life_expectancy():
         feature_source=feats_socio,
         dataset_id=meta.id,
         dataset_fingerprint=ds_fp,
-        target_name=meta.target_column
+        target_name=meta.target_column,
+        target_unit=meta.target_unit
     )
 
     m_broad = train_ols_experiment(
@@ -459,7 +464,8 @@ def test_real_dataset_demo_life_expectancy():
         feature_source=feats_all_avail,
         dataset_id=meta.id,
         dataset_fingerprint=ds_fp,
-        target_name=meta.target_column
+        target_name=meta.target_column,
+        target_unit=meta.target_unit
     )
 
     comp_res = run_model_comparison(
@@ -497,7 +503,8 @@ def test_real_dataset_demo_student_performance():
         feature_source=bg_feats,
         dataset_id=meta.id,
         dataset_fingerprint=ds_fp,
-        target_name=meta.target_column
+        target_name=meta.target_column,
+        target_unit=meta.target_unit
     )
 
     # Spec 2: With G1 & G2 exam history
@@ -507,7 +514,8 @@ def test_real_dataset_demo_student_performance():
         feature_source=hist_feats,
         dataset_id=meta.id,
         dataset_fingerprint=ds_fp,
-        target_name=meta.target_column
+        target_name=meta.target_column,
+        target_unit=meta.target_unit
     )
 
     suite_hist = run_full_diagnostic_suite(m_hist, split_result=split, alpha=0.05)
@@ -518,7 +526,7 @@ def test_real_dataset_demo_student_performance():
         active_dataset_fingerprint=ds_fp,
         active_split_fingerprint=split.split_fingerprint,
         active_target_name=meta.target_column,
-        active_target_unit="Grade",
+        active_target_unit=meta.target_unit,
         diagnostic_suites={m_hist.model_id: suite_hist},
         selected_candidate_id=m_hist.model_id,
         candidate_selection_rationale="Selected for high explanatory power on final grade."
