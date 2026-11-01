@@ -11,9 +11,10 @@ Tests:
 import io
 import json
 import zipfile
+from pathlib import Path
 import pytest
 
-from src.reporting.result_models import AuthorContent, ReportTemplateType
+from src.reporting.result_models import AuthorContent, ReportTemplateType, AcademicReportResult
 from src.reporting.source_resolver import ResolvedReportSources
 from src.reporting.figure_registry import ReportFigureRegistry
 from src.reporting.export_service import ReportExportService
@@ -21,6 +22,8 @@ from src.reporting.report_runner import run_academic_report
 from src.reporting.reproduction_script import generate_reproduction_script
 
 from tests.test_reporting_sources import create_dummy_model, create_dummy_comparison
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 class TestExportIntegrityAndReproducibility:
@@ -112,11 +115,24 @@ class TestExportIntegrityAndReproducibility:
 
         script_code = export_svc.export_reproduction_script()
         assert isinstance(script_code, str)
-        assert "def run_reproduction():" in script_code
+        # Without split artifact, it marks incomplete
+        assert "REPRODUCIBILITY STATUS: INCOMPLETE" in script_code
 
-        # Test syntax compilation
-        compiled = compile(script_code, "reproduce.py", "exec")
-        assert compiled is not None
+    def test_reproduction_script_incomplete_status_when_sources_missing(self):
+        m1 = create_dummy_model("m1")
+        # sources with no split artifact
+        sources = ResolvedReportSources(model=m1, split_result=None)
+        rep = AcademicReportResult(
+            report_id="rep_test",
+            report_title="Test Report",
+            template_type="full_academic",
+            dataset_id="ds1",
+            dataset_fingerprint="fp1",
+            split_fingerprint="sp1"
+        )
+        script = generate_reproduction_script(rep, sources)
+        assert "REPRODUCIBILITY STATUS: INCOMPLETE" in script
+        assert "raise RuntimeError" in script
 
     def test_reproduction_zip_package_contents(self, sample_report_and_sources):
         report, sources, fig_reg = sample_report_and_sources
@@ -141,3 +157,69 @@ class TestExportIntegrityAndReproducibility:
             assert len(zf.read("report.html")) > 100
             assert len(zf.read("manifest.json")) > 50
             assert len(zf.read("reproduce.py")) > 50
+
+    def test_end_to_end_execution_of_generated_reproduction_script(self, tmp_path):
+        """
+        Mandatory Task 2 verification:
+        Execute generated reproduce.py end-to-end via Python subprocess on a real dataset
+        and verify that training & validation metrics reproduce within numerical tolerance.
+        """
+        import subprocess
+        import sys
+        from src.data.registry import get_registry
+        from src.data.loader import load_dataset_bundle, get_dataset_fingerprint
+        from src.data.models import SplitConfig, SplitStrategy
+        from src.data.splitters import split_dataset
+        from src.models.model_service import train_ols_experiment
+
+        reg = get_registry()
+        meta = reg.get_dataset("student_performance")
+        raw_df, feat_df, target_ser, _ = load_dataset_bundle(meta)
+        ds_fp = get_dataset_fingerprint(meta)
+
+        cfg = SplitConfig(strategy=SplitStrategy.RANDOM, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, random_seed=42)
+        split = split_dataset(feat_df, target_ser, meta, cfg, raw_df=raw_df)
+
+        feats = ["studytime", "failures", "absences"]
+        model = train_ols_experiment(
+            split_result=split,
+            feature_source=feats,
+            dataset_id=meta.id,
+            dataset_fingerprint=ds_fp,
+            target_name=meta.target_column,
+            target_unit=meta.target_unit
+        )
+
+        sources = ResolvedReportSources(
+            model=model,
+            dataset_metadata=meta,
+            split_result=split
+        )
+        report = run_academic_report(
+            sources=sources,
+            report_title="Student Performance Empirical Replay"
+        )
+        export_svc = ReportExportService(report=report, sources=sources)
+        script_code = export_svc.export_reproduction_script()
+
+        # Write out reproduce.py to temporary directory
+        script_path = tmp_path / "reproduce.py"
+        script_path.write_text(script_code, encoding="utf-8")
+
+        # Execute the generated script via Python subprocess
+        proc = subprocess.run(
+            [sys.executable, str(script_path)],
+            cwd=str(PROJECT_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            timeout=60
+        )
+        print("reproduce.py stdout:\n", proc.stdout)
+        if proc.returncode != 0:
+            print("reproduce.py stderr:\n", proc.stderr)
+
+        assert proc.returncode == 0
+        assert "REPRODUCTION SUCCESSFUL: All reported metrics match within numerical tolerance." in proc.stdout
+        assert "Split partition integrity verified." in proc.stdout

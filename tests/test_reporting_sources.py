@@ -22,8 +22,9 @@ from src.experiments.regression_experiment_tracker import RegressionExperimentTr
 from src.experiments.comparison_experiment_tracker import ComparisonExperimentTracker
 from src.experiments.report_experiment_tracker import ReportExperimentTracker
 
-from src.reporting.source_resolver import ReportSourceResolver
+from src.reporting.source_resolver import ReportSourceResolver, ResolvedReportSources
 from src.reporting.compatibility import validate_report_artifacts
+from src.reporting.comparison_adapter import adapt_leaderboard_row, adapt_comparison_leaderboard
 from src.reporting.readiness import evaluate_report_readiness
 from src.reporting.result_models import AcademicReportResult, ReportTemplateType, ReadinessStatus
 from src.reporting.report_runner import compute_deterministic_report_id, run_academic_report
@@ -237,6 +238,81 @@ class TestReportSourceResolution:
         assert not compat.is_compatible
         assert any("not among the compared models" in r for r in compat.reasons)
 
+    def test_candidate_mismatch_blocks_without_override(self):
+        m1 = create_dummy_model("m1")
+        comp = create_dummy_comparison("c1", model_ids=["m1", "m2"], candidate_id="m2")
+        compat = validate_report_artifacts(model=m1, comparison=comp, allow_alternative_model=False)
+
+        assert not compat.is_compatible
+        assert any("does not match comparison candidate" in r for r in compat.reasons)
+
+        # When explicitly authorized, it warns instead of blocking
+        compat_allowed = validate_report_artifacts(model=m1, comparison=comp, allow_alternative_model=True)
+        assert compat_allowed.is_compatible
+        assert any("differs from the formally selected candidate" in w for w in compat_allowed.warnings)
+
+    def test_deliberately_altered_comparison_val_rmse_blocks_report(self):
+        m1 = create_dummy_model("m1", val_rmse=1.2345, val_r2=0.8500)
+        # Create comparison leaderboard with display-style keys matching Milestone 5
+        lb = [{
+            "Rank": 1,
+            "Model ID": "m1",
+            "Feature Source": "All Features",
+            "Original Features (K)": 5,
+            "Parameters (p)": 6,
+            "Val RMSE": 2.5000,  # Deliberately altered from 1.2345!
+            "Train RMSE": 1.1000,
+            "Gen. Gap": 1.4000,
+            "Val R²": 0.8500,
+            "Train R²": 0.8800,
+            "Pareto Status": "★ Optimal (Pareto)"
+        }]
+        comp = create_dummy_comparison("c1", model_ids=["m1"], candidate_id="m1")
+        comp.leaderboard = lb
+
+        compat = validate_report_artifacts(model=m1, comparison=comp)
+        assert not compat.is_compatible
+        assert any("Inconsistent Validation RMSE" in r for r in compat.reasons)
+
+        # Confirm report readiness blocks report generation
+        sources = ResolvedReportSources(model=m1, comparison=comp)
+        rep = run_academic_report(sources=sources)
+        assert rep.readiness_status == "blocked"
+        assert any("Inconsistent Validation RMSE" in b for b in rep.readiness_reasons)
+
+    def test_missing_leaderboard_keys_raise_error_never_fabricate_zero(self):
+        incomplete_row = {
+            "Model ID": "m1",
+            # Val RMSE and Val R² are completely missing
+            "Parameters (p)": 5
+        }
+        with pytest.raises(ValueError) as excinfo:
+            adapt_leaderboard_row(incomplete_row)
+        assert "missing mandatory Validation RMSE" in str(excinfo.value)
+
+    def test_explicit_diagnostic_suite_id_never_silently_replaced(self):
+        reg_tracker = RegressionExperimentTracker()
+        m1 = create_dummy_model("m1")
+        reg_tracker.add_model(m1)
+
+        diag_suite_real = DiagnosticSuiteResult(
+            suite_id="diag_suite_real",
+            model_id="m1",
+            dataset_id=m1.dataset_id,
+            dataset_fingerprint=m1.dataset_fingerprint,
+            split_fingerprint=m1.split_fingerprint,
+            diagnostics={}
+        )
+        suites = {"diag_suite_real": diag_suite_real}
+
+        resolver = ReportSourceResolver(regression_tracker=reg_tracker, diagnostic_suites=suites)
+        # Request a non-existent explicit suite ID
+        sources = resolver.resolve(selected_model_id="m1", diagnostic_suite_id="nonexistent_suite_id")
+
+        # Crucial test: It must NOT silently substitute "diag_suite_real"!
+        assert sources.diagnostic_suite is None
+        assert any("nonexistent_suite_id" in w for w in sources.resolution_warnings)
+
 
 class TestReportTrackingAndIdentity:
     """Group H: Report tracking, immutability, and deterministic ID tests."""
@@ -247,6 +323,7 @@ class TestReportTrackingAndIdentity:
             dataset_fingerprint="ds_fp",
             split_fingerprint="split_fp",
             template_type="full_academic",
+            report_title="Title A",
             comparison_id="comp_1",
             author_text="Author text A"
         )
@@ -255,11 +332,26 @@ class TestReportTrackingAndIdentity:
             dataset_fingerprint="ds_fp",
             split_fingerprint="split_fp",
             template_type="full_academic",
+            report_title="Title A",
             comparison_id="comp_1",
             author_text="Author text A"
         )
         assert id1 == id2
         assert id1.startswith("rep_")
+
+    def test_distinct_report_ids_for_changed_title_and_sections(self):
+        id_title_a = compute_deterministic_report_id("m1", "ds_fp", "sp_fp", "full_academic", report_title="Title A")
+        id_title_b = compute_deterministic_report_id("m1", "ds_fp", "sp_fp", "full_academic", report_title="Title B")
+        assert id_title_a != id_title_b
+
+        id_sec_1 = compute_deterministic_report_id("m1", "ds_fp", "sp_fp", "full_academic", enabled_section_ids=["s1", "s2"])
+        id_sec_2 = compute_deterministic_report_id("m1", "ds_fp", "sp_fp", "full_academic", enabled_section_ids=["s1", "s3"])
+        assert id_sec_1 != id_sec_2
+
+    def test_distinct_report_ids_for_changed_diagnostic_suite(self):
+        id_suite_1 = compute_deterministic_report_id("m1", "ds_fp", "sp_fp", "full_academic", diagnostic_suite_id="suite_1")
+        id_suite_2 = compute_deterministic_report_id("m1", "ds_fp", "sp_fp", "full_academic", diagnostic_suite_id="suite_2")
+        assert id_suite_1 != id_suite_2
 
     def test_distinct_report_ids_for_changed_author_text(self):
         id1 = compute_deterministic_report_id("m1", "ds_fp", "sp_fp", "full_academic", author_text="Notes A")

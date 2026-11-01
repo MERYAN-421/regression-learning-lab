@@ -27,19 +27,24 @@ def compute_deterministic_report_id(
     dataset_fingerprint: str,
     split_fingerprint: str,
     template_type: str,
+    report_title: str = "",
+    enabled_section_ids: Optional[List[str]] = None,
     comparison_id: Optional[str] = None,
     diagnostic_suite_id: Optional[str] = None,
     author_text: str = "",
     include_final_test: bool = False
 ) -> str:
     """
-    Computes a deterministic hash ID identifying the exact report configuration and sources.
+    Computes a deterministic hash ID identifying the exact report configuration, settings, and sources.
     """
     hasher = hashlib.sha256()
     hasher.update(model_id.encode("utf-8"))
     hasher.update(dataset_fingerprint.encode("utf-8"))
     hasher.update(split_fingerprint.encode("utf-8"))
     hasher.update(template_type.encode("utf-8"))
+    hasher.update(report_title.encode("utf-8"))
+    if enabled_section_ids:
+        hasher.update(",".join(sorted(enabled_section_ids)).encode("utf-8"))
     if comparison_id:
         hasher.update(comparison_id.encode("utf-8"))
     if diagnostic_suite_id:
@@ -56,6 +61,7 @@ def run_academic_report(
     author_content: Optional[AuthorContent] = None,
     enabled_section_ids: Optional[List[str]] = None,
     include_final_test_authorized: bool = False,
+    allow_alternative_model: bool = False,
     expected_dataset_id: Optional[str] = None,
     expected_dataset_fingerprint: Optional[str] = None,
     expected_split_fingerprint: Optional[str] = None,
@@ -73,7 +79,8 @@ def run_academic_report(
         expected_dataset_id=expected_dataset_id,
         expected_dataset_fingerprint=expected_dataset_fingerprint,
         expected_split_fingerprint=expected_split_fingerprint,
-        expected_target_unit=expected_target_unit
+        expected_target_unit=expected_target_unit,
+        allow_alternative_model=allow_alternative_model
     )
 
     now_iso = datetime.utcnow().isoformat() + "Z"
@@ -98,13 +105,16 @@ def run_academic_report(
     diag_suite_id = sources.diagnostic_suite.suite_id if sources.diagnostic_suite else None
     comp_id = sources.comparison.comparison_id if sources.comparison else None
 
-    # Compute stable report ID
-    author_composite = f"{author.author_name}_{author.research_question}_{author.main_findings}"
+    # Compute stable report ID covering all content-affecting parameters
+    author_composite = json.dumps(author.to_dict(), sort_keys=True)
+
     report_id = compute_deterministic_report_id(
         model_id=model.model_id,
         dataset_fingerprint=model.dataset_fingerprint,
         split_fingerprint=model.split_fingerprint,
         template_type=template_type.value,
+        report_title=report_title,
+        enabled_section_ids=enabled_section_ids,
         comparison_id=comp_id,
         diagnostic_suite_id=diag_suite_id,
         author_text=author_composite,

@@ -36,7 +36,8 @@ def evaluate_report_readiness(
     expected_dataset_fingerprint: Optional[str] = None,
     expected_split_fingerprint: Optional[str] = None,
     expected_target_unit: Optional[str] = None,
-    require_comparison: bool = False
+    require_comparison: bool = False,
+    allow_alternative_model: bool = False
 ) -> ReportReadinessEvaluation:
     """
     Evaluates whether the provided experimental artifacts satisfy the integrity requirements
@@ -71,7 +72,8 @@ def evaluate_report_readiness(
         expected_dataset_id=expected_dataset_id,
         expected_dataset_fingerprint=expected_dataset_fingerprint,
         expected_split_fingerprint=expected_split_fingerprint,
-        expected_target_unit=expected_target_unit
+        expected_target_unit=expected_target_unit,
+        allow_alternative_model=allow_alternative_model
     )
 
     if not compat.is_compatible:

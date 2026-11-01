@@ -21,6 +21,7 @@ from src.reporting.result_models import (
     AuthorContent,
     EvidenceManifest
 )
+from src.reporting.comparison_adapter import adapt_comparison_leaderboard
 from src.reporting.source_resolver import ResolvedReportSources
 from src.reporting.interpretation import (
     interpret_hypothesis_test,
@@ -546,26 +547,35 @@ class AcademicSectionBuilder:
             f"candidate OLS specifications on the validation partition under ranking policy `{comp.ranking_policy}`."
         )
 
-        # Leaderboard table
+        # Leaderboard table using canonical typed adapter
+        target_cand_id = comp.selected_candidate_model_id or (self.sources.model.model_id if self.sources.model else None)
+        canonical_rows = adapt_comparison_leaderboard(comp)
         lb_rows = []
-        for rank, row in enumerate(comp.leaderboard, start=1):
-            is_cand = (row.get("model_id") == comp.selected_candidate_model_id)
+        for row in canonical_rows:
+            is_cand = (row.model_id == target_cand_id)
             cand_tag = " ⭐ (Candidate)" if is_cand else ""
+            model_id_tag = f"{row.model_id} [Selected Candidate]" if is_cand else row.model_id
+            val_rmse_str = f"{row.val_rmse:.3f}{u}"
+            val_r2_str = f"{row.val_r2:.4f}"
+            gen_gap_str = f"{row.generalization_gap:.3f}{u}" if row.generalization_gap is not None else "N/A"
+            pareto_str = "Yes (Pareto Efficient)" if row.is_pareto else "No (Dominated)"
+
             lb_rows.append({
-                "Rank": str(rank),
-                "Model Name": str(row.get("model_name")) + cand_tag,
-                "Feature Method": str(row.get("feature_source_label")),
-                "Params (p)": str(row.get("parameter_count")),
-                "Val RMSE": f"{row.get('val_rmse', 0):.3f}{u}",
-                "Val R²": f"{row.get('val_r2', 0):.4f}",
-                "Gen. Gap": f"{row.get('generalization_gap', 0):.3f}{u}",
-                "Pareto?": "Yes" if row.get("is_pareto_efficient") else "No"
+                "Rank": str(row.rank),
+                "Model Name": f"{row.model_name}{cand_tag}",
+                "Model ID": model_id_tag,
+                "Feature Method": row.feature_source,
+                "Params (p)": str(row.parameter_count),
+                "Val RMSE": val_rmse_str,
+                "Val R²": val_r2_str,
+                "Gen. Gap": gen_gap_str,
+                "Pareto Status": pareto_str
             })
 
         tables.append({
             "table_id": "tbl_comparison_leaderboard",
             "title": "Validation-Based Candidate Leaderboard (Strictly No Test Data)",
-            "headers": ["Rank", "Model Name", "Feature Method", "Params (p)", "Val RMSE", "Val R²", "Gen. Gap", "Pareto?"],
+            "headers": ["Rank", "Model Name", "Model ID", "Feature Method", "Params (p)", "Val RMSE", "Val R²", "Gen. Gap", "Pareto Status"],
             "rows": lb_rows
         })
 

@@ -26,6 +26,9 @@ class ReportCompatibilityResult:
     target_unit: Optional[str] = None
 
 
+from src.reporting.comparison_adapter import adapt_leaderboard_row
+
+
 def validate_report_artifacts(
     model: Optional[OLSModelResult],
     comparison: Optional[ExperimentComparisonResult] = None,
@@ -34,7 +37,8 @@ def validate_report_artifacts(
     expected_dataset_id: Optional[str] = None,
     expected_dataset_fingerprint: Optional[str] = None,
     expected_split_fingerprint: Optional[str] = None,
-    expected_target_unit: Optional[str] = None
+    expected_target_unit: Optional[str] = None,
+    allow_alternative_model: bool = False
 ) -> ReportCompatibilityResult:
     """
     Validates structural and methodological compatibility among all experimental artifacts
@@ -111,25 +115,36 @@ def validate_report_artifacts(
 
         # Verify if candidate matches comparison's recorded candidate
         if comparison.selected_candidate_model_id and comparison.selected_candidate_model_id != model.model_id:
-            warnings.append(
-                f"Reporting model '{model.model_id}' differs from the formally selected candidate "
-                f"'{comparison.selected_candidate_model_id}' in comparison '{comparison.comparison_id}'."
-            )
+            if not allow_alternative_model:
+                reasons.append(
+                    f"Selected model '{model.model_id}' does not match comparison candidate "
+                    f"'{comparison.selected_candidate_model_id}' in comparison '{comparison.comparison_id}'. "
+                    "Set allow_alternative_model=True to analyze a non-candidate comparison model."
+                )
+            else:
+                warnings.append(
+                    f"Reporting model '{model.model_id}' differs from the formally selected candidate "
+                    f"'{comparison.selected_candidate_model_id}' in comparison '{comparison.comparison_id}'."
+                )
 
-        # Negative Test Case 2: Validate metric consistency between model and comparison leaderboard
-        for row in comparison.leaderboard:
-            if row.get("model_id") == model.model_id:
-                comp_val_rmse = row.get("val_rmse")
-                if comp_val_rmse is not None and abs(comp_val_rmse - model.val_metrics.rmse) > 1e-4:
+        # Validate metric consistency between model and comparison leaderboard
+        for raw_row in comparison.leaderboard:
+            try:
+                row = adapt_leaderboard_row(raw_row, pareto_model_ids=comparison.pareto_model_ids)
+            except ValueError as e:
+                reasons.append(f"Comparison leaderboard schema error: {str(e)}")
+                continue
+
+            if row.model_id == model.model_id:
+                if abs(row.val_rmse - model.val_metrics.rmse) > 1e-4:
                     reasons.append(
                         f"Inconsistent Validation RMSE: Model '{model.model_id}' artifact records {model.val_metrics.rmse:.6f}, "
-                        f"but Comparison leaderboard records {comp_val_rmse:.6f}. Evidence is stale or altered."
+                        f"but Comparison leaderboard records {row.val_rmse:.6f}. Evidence is stale or altered."
                     )
-                comp_val_r2 = row.get("val_r2")
-                if comp_val_r2 is not None and abs(comp_val_r2 - model.val_metrics.r2) > 1e-4:
+                if abs(row.val_r2 - model.val_metrics.r2) > 1e-4:
                     reasons.append(
                         f"Inconsistent Validation R²: Model '{model.model_id}' artifact records {model.val_metrics.r2:.6f}, "
-                        f"but Comparison leaderboard records {comp_val_r2:.6f}. Evidence is stale or altered."
+                        f"but Comparison leaderboard records {row.val_r2:.6f}. Evidence is stale or altered."
                     )
                 break
 

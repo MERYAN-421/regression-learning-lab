@@ -68,7 +68,7 @@ class ReportExportService:
         html_content = self.export_html()
         json_content = self.export_manifest_json()
         py_content = self.export_reproduction_script()
-        readme_content = generate_reproduction_readme(self.report)
+        readme_content = generate_reproduction_readme(self.report, sources=self.sources)
         reqs_content = generate_requirements_txt()
 
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:

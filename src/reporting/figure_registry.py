@@ -425,10 +425,13 @@ class ReportFigureRegistry:
             return ref
 
         try:
-            df_leaderboard = pd.DataFrame(comp.leaderboard)
+            models_list = list(self.sources.all_comparison_models.values())
+            if not models_list and self.sources.model:
+                models_list = [self.sources.model]
+
             cand_id = comp.selected_candidate_model_id
             fig = create_pareto_scatter_chart(
-                df_leaderboard,
+                models=models_list,
                 pareto_model_ids=comp.pareto_model_ids,
                 selected_model_id=cand_id,
                 target_unit=comp.target_unit

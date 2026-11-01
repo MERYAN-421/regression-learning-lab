@@ -15,23 +15,44 @@ def generate_reproduction_script(
     sources: ResolvedReportSources
 ) -> str:
     """
-    Constructs an executable Python script reproducing the reported model fitting and evaluation.
+    Constructs an executable Python script reproducing the reported model fitting and evaluation
+    using real project APIs.
     """
     model = sources.model
     split = sources.split_result
     meta = sources.dataset_metadata
 
-    if model is None:
-        return "# Error: Cannot generate reproduction script without primary model artifact.\n"
+    if model is None or split is None:
+        missing_parts = []
+        if model is None:
+            missing_parts.append("primary OLS model artifact")
+        if split is None:
+            missing_parts.append("data split partitioning artifact")
+        return (
+            "# REPRODUCIBILITY STATUS: INCOMPLETE\n"
+            "# STRICT TEST ISOLATION: Locked Test Set evaluation is excluded from development replay.\n"
+            f"# Cannot generate complete reproduction script: Missing {', '.join(missing_parts)}.\n"
+            "# Required configuration artifacts were not preserved in the reporting source resolver.\n\n"
+            "raise RuntimeError('Reproducibility Incomplete: Required configuration artifacts missing.')\n"
+        )
 
     ds_id = model.dataset_id
     features_repr = repr(model.selected_original_features)
     fit_intercept = model.fit_intercept
     scale_numeric = model.scale_numeric
-    strat_val = getattr(split, "strategy", getattr(split, "strategy_used", "random")) if split else "random"
+    allow_rank_def = not model.is_valid_for_inference
+
+    # Determine split configuration
+    strat_val = getattr(split, "strategy", "random")
     split_strategy = strat_val.value if hasattr(strat_val, "value") else str(strat_val)
-    random_seed = split.random_seed if split and getattr(split, "random_seed", None) is not None else 42
-    target_unit = model.target_unit or ""
+    random_seed = split.random_seed if getattr(split, "random_seed", None) is not None else 42
+
+    proportions = getattr(split, "actual_proportions", {})
+    raw_tr = proportions.get("train", 0.70)
+    raw_val = proportions.get("val", 0.15)
+    train_ratio = round(raw_tr, 2)
+    val_ratio = round(raw_val, 2)
+    test_ratio = round(1.0 - train_ratio - val_ratio, 2)
 
     exp_train_rmse = model.train_metrics.rmse
     exp_val_rmse = model.val_metrics.rmse
@@ -54,14 +75,34 @@ Reproducibility Scope:
 """
 
 import sys
+from pathlib import Path
+
+# Reconfigure stdout for UTF-8 compatibility across international environments
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+# Ensure project root is in sys.path for standalone or nested execution
+_current_dir = Path(__file__).resolve().parent
+if not (_current_dir / "src").exists():
+    for p in [_current_dir] + list(_current_dir.parents) + [Path.cwd()] + list(Path.cwd().parents):
+        if (p / "src").exists():
+            _current_dir = p
+            break
+if str(_current_dir) not in sys.path:
+    sys.path.insert(0, str(_current_dir))
+
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
 
-from src.data.loader import load_dataset, get_dataset_fingerprint
-from src.data.splitters import split_dataset, SplitStrategy
+from src.data.registry import get_registry
+from src.data.loader import load_dataset_bundle, get_dataset_fingerprint
+from src.data.models import SplitConfig, SplitStrategy
+from src.data.splitters import split_dataset
 from src.models.design_matrix import build_ols_design_matrices
-from src.evaluation.regression_metrics import compute_regression_metrics
+from src.models.ols_model import fit_ols_model
 
 
 def run_reproduction():
@@ -71,43 +112,52 @@ def run_reproduction():
     print(f"Model ID:  {model.model_id}")
     print("=" * 70)
 
-    # 1. Load Verified Dataset
-    print(f"\\n[1/4] Loading dataset '{ds_id}'...")
-    df, meta = load_dataset("{ds_id}")
-    actual_fp = get_dataset_fingerprint(df)
+    # 1. Load Verified Dataset via Registry
+    print(f"\\n[1/4] Loading dataset '{ds_id}' via DatasetRegistry...")
+    registry = get_registry()
+    if "{ds_id}" not in registry.get_all_ids():
+        raise RuntimeError("Dataset '{ds_id}' is not registered in DatasetRegistry.")
+    meta = registry.get_dataset("{ds_id}")
+    actual_fp = get_dataset_fingerprint(meta)
     expected_fp = "{model.dataset_fingerprint}"
-    print(f"  Loaded {{len(df):,}} rows. Fingerprint: {{actual_fp[:12]}}...")
     assert actual_fp == expected_fp, f"Dataset fingerprint mismatch! Expected {{expected_fp}}, got {{actual_fp}}"
-    print("  ✓ Dataset integrity verified.")
+    
+    raw_df, feature_df, target_series, metadata_df = load_dataset_bundle(meta)
+    print(f"  Loaded {{len(raw_df):,}} rows. Fingerprint: {{actual_fp[:12]}}...")
+    print("  [OK] Dataset integrity verified.")
 
     # 2. Partition Dataset (Strict Development Partitioning)
-    print("\\n[2/4] Partitioning dataset...")
-    # Map split strategy
+    print("\\n[2/4] Partitioning dataset using recorded SplitConfig...")
     strat_map = {{
         "random": SplitStrategy.RANDOM,
         "temporal": SplitStrategy.TEMPORAL,
         "group": SplitStrategy.GROUP
     }}
     strat = strat_map.get("{split_strategy}", SplitStrategy.RANDOM)
-    group_col = getattr(meta, "group_column", None)
-    date_col = getattr(meta, "date_column", None)
+    split_cfg = SplitConfig(
+        strategy=strat,
+        train_ratio={train_ratio},
+        val_ratio={val_ratio},
+        test_ratio={test_ratio},
+        random_seed={random_seed},
+        date_column=meta.date_column if strat == SplitStrategy.TEMPORAL else None,
+        group_column=meta.group_column if strat == SplitStrategy.GROUP else None
+    )
 
     split_res = split_dataset(
-        df=df,
-        target_column=meta.target_column,
-        strategy=strat,
-        train_ratio=0.70,
-        val_ratio=0.15,
-        test_ratio=0.15,
-        random_seed={random_seed},
-        group_column=group_col,
-        date_column=date_col
+        feature_df=feature_df,
+        target_series=target_series,
+        metadata=meta,
+        config=split_cfg,
+        raw_df=raw_df
     )
-    print(f"  Train: {{split_res.n_train:,}} | Val: {{split_res.n_val:,}} | Test (Locked): {{split_res.n_test:,}}")
-    assert split_res.split_fingerprint == "{model.split_fingerprint}", "Split partition fingerprint mismatch!"
-    print("  ✓ Split partition integrity verified.")
+    print(f"  Train: {{len(split_res.X_train):,}} | Val: {{len(split_res.X_val):,}} | Test (Locked): {{len(split_res.X_test):,}}")
+    assert split_res.split_fingerprint == "{model.split_fingerprint}", (
+        f"Split partition fingerprint mismatch! Expected {model.split_fingerprint}, got {{split_res.split_fingerprint}}"
+    )
+    print("  [OK] Split partition integrity verified.")
 
-    # 3. Construct OLS Design Matrices
+    # 3. Construct OLS Design Matrices and Fit OLS
     print("\\n[3/4] Constructing design matrices and fitting OLS model...")
     selected_features = {features_repr}
     print(f"  Selected {{len(selected_features)}} original features: {{selected_features}}")
@@ -124,37 +174,35 @@ def run_reproduction():
     )
     print(f"  Design parameters (p): {{design_res.metadata.num_parameters}} | Matrix Rank: {{design_res.metadata.matrix_rank}}")
 
-    # Fit OLS on Training partition
-    ols_model = sm.OLS(split_res.y_train.values, design_res.X_train_design.values).fit()
-    print("  ✓ OLS model estimation complete.")
+    ols_res = fit_ols_model(
+        design_result=design_res,
+        y_train=split_res.y_train,
+        y_val=split_res.y_val,
+        target_name=meta.target_column,
+        builder=builder,
+        allow_rank_deficient={allow_rank_def}
+    )
+    print("  [OK] OLS model estimation complete via statsmodels.")
 
     # 4. Out-of-Sample Validation & Metric Verification
     print("\\n[4/4] Validating reproduced metrics against report values...")
-    train_preds = pd.Series(ols_model.predict(design_res.X_train_design.values), index=split_res.X_train.index)
-    val_preds = pd.Series(ols_model.predict(design_res.X_val_design.values), index=split_res.X_val.index)
-
-    p_slopes = design_res.metadata.num_parameters - (1 if {fit_intercept} else 0)
-    train_metrics = compute_regression_metrics(split_res.y_train, train_preds, num_non_intercept_parameters=p_slopes, split_name="Train", is_in_sample=True, fit_intercept={fit_intercept})
-    val_metrics = compute_regression_metrics(split_res.y_val, val_preds, num_non_intercept_parameters=p_slopes, split_name="Validation", is_in_sample=False, fit_intercept={fit_intercept})
-
-    # Compare with expected reported values
     exp_tr_rmse = {exp_train_rmse}
     exp_v_rmse = {exp_val_rmse}
     exp_tr_r2 = {exp_train_r2}
     exp_v_r2 = {exp_val_r2}
 
-    print(f"  Rep. Train RMSE: {{train_metrics.rmse:.6f}} (Expected: {{exp_tr_rmse:.6f}})")
-    print(f"  Rep. Val RMSE:   {{val_metrics.rmse:.6f}} (Expected: {{exp_v_rmse:.6f}})")
-    print(f"  Rep. Train R²:   {{train_metrics.r2:.6f}} (Expected: {{exp_tr_r2:.6f}})")
-    print(f"  Rep. Val R²:     {{val_metrics.r2:.6f}} (Expected: {{exp_v_r2:.6f}})")
+    print(f"  Rep. Train RMSE: {{ols_res.train_metrics.rmse:.6f}} (Expected: {{exp_tr_rmse:.6f}})")
+    print(f"  Rep. Val RMSE:   {{ols_res.val_metrics.rmse:.6f}} (Expected: {{exp_v_rmse:.6f}})")
+    print(f"  Rep. Train R²:   {{ols_res.train_metrics.r2:.6f}} (Expected: {{exp_tr_r2:.6f}})")
+    print(f"  Rep. Val R²:     {{ols_res.val_metrics.r2:.6f}} (Expected: {{exp_v_r2:.6f}})")
 
-    np.testing.assert_allclose(train_metrics.rmse, exp_tr_rmse, rtol=1e-4, atol=1e-4, err_msg="Train RMSE mismatch!")
-    np.testing.assert_allclose(val_metrics.rmse, exp_v_rmse, rtol=1e-4, atol=1e-4, err_msg="Val RMSE mismatch!")
-    np.testing.assert_allclose(train_metrics.r2, exp_tr_r2, rtol=1e-4, atol=1e-4, err_msg="Train R² mismatch!")
-    np.testing.assert_allclose(val_metrics.r2, exp_v_r2, rtol=1e-4, atol=1e-4, err_msg="Val R² mismatch!")
+    np.testing.assert_allclose(ols_res.train_metrics.rmse, exp_tr_rmse, rtol=1e-4, atol=1e-4, err_msg="Train RMSE mismatch!")
+    np.testing.assert_allclose(ols_res.val_metrics.rmse, exp_v_rmse, rtol=1e-4, atol=1e-4, err_msg="Val RMSE mismatch!")
+    np.testing.assert_allclose(ols_res.train_metrics.r2, exp_tr_r2, rtol=1e-4, atol=1e-4, err_msg="Train R² mismatch!")
+    np.testing.assert_allclose(ols_res.val_metrics.r2, exp_v_r2, rtol=1e-4, atol=1e-4, err_msg="Val R² mismatch!")
 
     print("\\n" + "=" * 70)
-    print("✓ REPRODUCTION SUCCESSFUL: All reported metrics match within numerical tolerance.")
+    print("REPRODUCTION SUCCESSFUL: All reported metrics match within numerical tolerance.")
     print("=" * 70)
 
 
@@ -164,20 +212,25 @@ if __name__ == "__main__":
     return script
 
 
-def generate_reproduction_readme(report: AcademicReportResult) -> str:
+def generate_reproduction_readme(report: AcademicReportResult, sources: Optional[ResolvedReportSources] = None) -> str:
     """Generates the README_REPRODUCTION.md documentation for the export package."""
+    status_str = "COMPLETE & VERIFIED"
+    if sources is None or sources.model is None or sources.split_result is None:
+        status_str = "INCOMPLETE (Configuration artifacts not fully preserved)"
+
     return f"""# Reproduction Package: {report.report_title}
 
 **Report ID**: `{report.report_id}`  
 **Dataset**: `{report.dataset_id}` (Fingerprint: `{report.dataset_fingerprint}`)  
 **Model ID**: `{report.selected_model_id}`  
+**Reproducibility Status**: `{status_str}`  
 **Audit Timestamp**: `{report.generated_timestamp}`  
 
 ## Package Contents
 1. `report.md`: The complete academic report formatted in GitHub-flavored Markdown.
-2. `report.html`: The standalone, self-contained interactive report with embedded styles and formulas.
+2. `report.html`: The standalone, self-contained interactive report with embedded styles, tables, and formula styling.
 3. `manifest.json`: The complete audit manifest containing all verified evidence claims.
-4. `reproduce.py`: Standalone Python reproduction script recreating the development-stage OLS fit and out-of-sample validation metrics.
+4. `reproduce.py`: Standalone Python reproduction script recreating the development-stage OLS fit and out-of-sample validation metrics using official project APIs.
 5. `requirements.txt`: Python dependencies required for execution.
 
 ## Execution Instructions
@@ -188,10 +241,13 @@ pip install -r requirements.txt
 python reproduce.py
 ```
 
-The script will load the dataset, partition it using the verified seed and strategy, fit the OLS regression model on the training set, and assert that reproduced validation metrics match the reported metrics within 1e-4 tolerance.
+The script loads the verified dataset via `DatasetRegistry`, partitions it using the recorded `SplitConfig` strategy and seed, constructs the OLS design matrices with exact reference-level encoding and imputation, fits the model via `fit_ols_model()`, and asserts that reproduced training and validation metrics match the reported metrics within 1e-4 numerical tolerance.
 
 ## Strict Test Set Isolation Notice
 The reproduction script is strictly confined to Development-Stage replay (Training and Validation). It does NOT access, evaluate, or optimize against the locked Test Set partition.
+
+## Standalone HTML & Offline Usage
+`report.html` is designed to be fully viewable offline without an active Streamlit server or backend database. Static summaries, tables, and mathematical notations are fully embedded and readable. Interactive Plotly charts and web-typeset MathJax formulas reference standard public CDNs when network access is present.
 """
 
 

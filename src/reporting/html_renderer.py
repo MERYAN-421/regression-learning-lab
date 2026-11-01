@@ -133,6 +133,24 @@ def render_report_html(
             margin: 0;
             padding: 0;
         }}
+        .network-notice-box {{
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid var(--primary-light);
+            color: #334155;
+            padding: 12px 18px;
+            border-radius: 6px;
+            font-size: 0.88rem;
+            margin: 16px 0 24px 0;
+            line-height: 1.5;
+        }}
+        code, pre {{
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }}
+        .math-fallback {{
+            font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Times New Roman", serif;
+            font-style: italic;
+        }}
         .layout-container {{
             display: flex;
             max-width: 1300px;
@@ -312,6 +330,10 @@ def render_report_html(
                     <span><strong>Report ID</strong>: <code>{report.report_id}</code></span>
                 </div>
             </header>
+
+            <div class="network-notice-box">
+                <strong>Standalone Export Disclosure</strong>: This document is fully readable offline without an active Streamlit server or backend database. Analytical prose, statistical tables, and mathematical formulas are completely self-contained. Interactive Plotly charts and web-typeset MathJax formulas reference standard public CDNs when network access is available; in offline environments, formulas remain fully legible in LaTeX/monospace notation and static table summaries remain accessible.
+            </div>
 
             {warnings_html}
 

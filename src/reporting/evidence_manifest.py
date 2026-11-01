@@ -688,6 +688,39 @@ class EvidenceManifestBuilder:
                 scope="validation"
             )
 
+            # Candidate comparison metrics via typed adapter
+            try:
+                from src.reporting.comparison_adapter import adapt_comparison_leaderboard
+                canonical_rows = adapt_comparison_leaderboard(comp)
+                for crow in canonical_rows:
+                    if crow.model_id == comp.selected_candidate_model_id:
+                        self._add(
+                            claim_id="comp_candidate_val_rmse",
+                            claim_type="comparison_metric",
+                            artifact_type="comparison",
+                            artifact_id=c_id,
+                            field_path="leaderboard.val_rmse",
+                            observed=crow.val_rmse,
+                            display=format_stat_display(crow.val_rmse),
+                            unit=comp.target_unit,
+                            ds_id=ds_id, ds_fp=ds_fp, split_fp=split_fp, m_id=crow.model_id,
+                            scope="validation"
+                        )
+                        self._add(
+                            claim_id="comp_candidate_val_r2",
+                            claim_type="comparison_metric",
+                            artifact_type="comparison",
+                            artifact_id=c_id,
+                            field_path="leaderboard.val_r2",
+                            observed=crow.val_r2,
+                            display=format_stat_display(crow.val_r2, precision=4),
+                            ds_id=ds_id, ds_fp=ds_fp, split_fp=split_fp, m_id=crow.model_id,
+                            scope="validation"
+                        )
+                        break
+            except Exception:
+                pass
+
         # -------------------------------------------------------------
         # 8. Final Test Evaluation (Authorized Appendix Only)
         # -------------------------------------------------------------

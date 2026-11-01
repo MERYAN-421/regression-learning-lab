@@ -101,22 +101,38 @@ class ReportSourceResolver:
 
         # 3. Resolve Diagnostic Suite
         if model is not None:
-            # Check explicit parameter first
-            if diagnostic_suite_id and diagnostic_suite_id in self.diagnostic_suites:
-                diag_suite = self.diagnostic_suites[diagnostic_suite_id]
-            # Check comparison reference next
+            if diagnostic_suite_id:
+                # Explicit diagnostic suite requested: never silently substitute
+                if diagnostic_suite_id in self.diagnostic_suites:
+                    diag_suite = self.diagnostic_suites[diagnostic_suite_id]
+                    if diag_suite.model_id != model.model_id:
+                        warnings.append(
+                            f"Explicit Diagnostic Suite '{diagnostic_suite_id}' was evaluated for model "
+                            f"'{diag_suite.model_id}', not selected model '{model.model_id}'."
+                        )
+                else:
+                    warnings.append(
+                        f"Explicit Diagnostic Suite '{diagnostic_suite_id}' was not found in available suites."
+                    )
+                    diag_suite = None
             elif comparison and model.model_id in comparison.referenced_diagnostic_suite_ids:
                 ref_suite_id = comparison.referenced_diagnostic_suite_ids[model.model_id]
-                if ref_suite_id and ref_suite_id in self.diagnostic_suites:
-                    diag_suite = self.diagnostic_suites[ref_suite_id]
-            # Search available suites matching model ID
-            if diag_suite is None:
+                if ref_suite_id:
+                    if ref_suite_id in self.diagnostic_suites:
+                        diag_suite = self.diagnostic_suites[ref_suite_id]
+                    else:
+                        warnings.append(
+                            f"Diagnostic Suite '{ref_suite_id}' referenced in comparison was not found in available suites."
+                        )
+                        diag_suite = None
+            else:
+                # Search available suites matching model ID only when no specific suite was requested/referenced
                 for s_id, s_obj in self.diagnostic_suites.items():
                     if s_obj.model_id == model.model_id:
                         diag_suite = s_obj
                         break
 
-            if diag_suite is None:
+            if diag_suite is None and not diagnostic_suite_id and not (comparison and model.model_id in comparison.referenced_diagnostic_suite_ids):
                 warnings.append(f"No statistical diagnostic suite resolved for model '{model.model_id}'.")
 
         # 4. Resolve Feature Selection Results

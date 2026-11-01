@@ -220,6 +220,22 @@ class TestRealDatasetReportGeneration:
         assert "USD" in manifest.get_record("dataset_target_unit").observed_value
         assert "USD" in manifest.get_record("val_rmse").unit
 
+        # Verify Section 7 Comparison Leaderboard table content
+        sec7 = next(s for s in report.report_sections if s.section_id == "sec_7_comparison")
+        assert len(sec7.tables) >= 1
+        comp_table = sec7.tables[0]
+        assert "Model ID" in comp_table["headers"]
+        assert "Val RMSE" in comp_table["headers"]
+        assert "Pareto Status" in comp_table["headers"]
+        # Candidate model should be in the table with [Selected Candidate]
+        cand_rows = [r for r in comp_table["rows"] if m_pruned.model_id in r["Model ID"]]
+        assert len(cand_rows) == 1
+        assert "[Selected Candidate]" in cand_rows[0]["Model ID"]
+        # Numeric values must match actual model metrics, not fabricated 0.0
+        val_rmse_val = float(str(cand_rows[0]["Val RMSE"]).split()[0])
+        assert val_rmse_val > 0.0
+        assert abs(val_rmse_val - m_pruned.val_metrics.rmse) < 1e-2
+
     def test_dataset_3_life_expectancy(self):
         """
         Dataset 3: Life Expectancy (WHO)
