@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-FF4B4B.svg?style=flat&logo=Streamlit&logoColor=white)](https://streamlit.io/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Milestone-5%20Completed-success.svg)]()
+[![Status](https://img.shields.io/badge/Milestone-6%20Completed-success.svg)]()
 
 > **Interactive Multiple Linear Regression & Statistical Diagnostics Platform**  
 > An educational web platform designed for data science and statistics students to explore real-world regression modeling, feature selection, and the classical Gauss-Markov assumptions using curated Kaggle tabular datasets (14–39 features).
@@ -60,6 +60,13 @@
   - **Statistical Diagnostic Comparison Matrix**: Side-by-side display of Ramsey RESET, Durbin-Watson, Ljung-Box, Breusch-Pagan, Jarque-Bera, and Max VIF without artificial composite scoring (Rule 3).
   - **Feature Selection Overlap & Stability**: Original feature binary inclusion matrix, pairwise Jaccard similarity, and selection frequency counts.
   - **Candidate Selection & Audit Trail**: Allows modeler to record chosen candidate with tagged justification rationale, preparing structured artifacts for Milestone 6.
+- **Academic Report Generation Laboratory (Milestone 6)**:
+  - **Three Academic Templates**: Full Academic Report (9 sections), Executive Summary, and Statistical Diagnostics Report sharing a common evidence verification engine.
+  - **Evidence Manifest Engine**: 100% deterministic claim-to-artifact mapping with zero fabricated statistics, verifiable cryptographic fingerprints, and explicit missing/incompatible state tracking.
+  - **Tri-State Readiness Dashboard**: Real-time evaluation into `READY`, `READY_WITH_LIMITATIONS`, and `BLOCKED` states preventing unverified publication.
+  - **Econometric Inference Guards**: Automated rule-based statistical interpretations enforcing Gauss-Markov vs Normality distinctions, exogeneity non-verifiability warnings, post-selection inference caveats, and prediction-only inference blocking for rank-deficient models.
+  - **Strict Test Set Isolation**: Reports strictly use Training/Validation evidence; Final Test metrics appear only in a dedicated authorized appendix without influencing model selection.
+  - **Multi-Format Publication Exports**: Standards-compliant GitHub-flavored Markdown (`report.md`), standalone responsive HTML with MathJax and embedded Plotly charts (`report.html`), Manifest JSON (`manifest.json`), and verified standalone Python reproduction packages (`reproduce.py`).
 
 ---
 
@@ -179,22 +186,17 @@ python -m src.data.download
 ```
 *(Alternatively, missing datasets can be downloaded on-demand directly in the UI via `pages/dataset.py`)*
 
-### 4. Run Automated Test Suite (92 Tests Passing)
-The test suite is structured into offline Unit Tests and real-dataset Integration Tests:
+### 4. Run Automated Test Suite (264 Tests Passing)
+The test suite covers unit, regression, diagnostic, comparison, reporting, and AppTest integration:
 
-- **Offline Unit Tests** (Runs 100% offline without external network or CSV downloads):
-  ```bash
-  pytest tests/test_structure.py tests/test_dataset_engine.py tests/test_eda.py tests/test_feature_selection.py -v
-  ```
-
-- **Real-Dataset Integration Workflow** (Verifies SHA-256 signatures, real schemas & splits):
-  ```bash
-  python tests/run_integration_tests.py
-  ```
-
-- **All 92 Tests Combined**:
+- **Comprehensive Test Execution**:
   ```bash
   pytest -v
+  ```
+
+- **Reporting Engine Tests Only**:
+  ```bash
+  pytest -k reporting -v
   ```
 
 ### 5. Launch the Streamlit Platform
@@ -215,7 +217,7 @@ Open your browser and navigate to `http://localhost:8501`.
 | **3** | **Regression & Evaluation** | statsmodels OLS fitting, econometric summary table, LaTeX equations, MSE/RMSE/R² | ✅ **Completed** |
 | **4** | **Assumption Diagnostics** | Five Gauss-Markov diagnostic tests, residual plots, Cook's distance, leverage | ✅ **Completed** |
 | **5** | **Experiment & Model Comparison** | Validation-based leaderboard, radar charts, Pareto complexity frontier, diagnostic matrix, feature overlap, candidate selection | ✅ **Completed** |
-| **6** | **Report Generation** | Automated academic laboratory report generator, executive summary synthesis, Markdown/HTML export | ⏳ Scheduled |
+| **6** | **Academic Report Laboratory** | Auditable evidence manifest, 3 report templates, Markdown/HTML/JSON/ZIP exports, Python reproduction scripts | ✅ **Completed** |
 | **7** | **Deployment & Final Verification** | Cloud deployment verification, end-to-end integration audit, and final platform release | ⏳ Scheduled |
 
 ---
@@ -223,6 +225,8 @@ Open your browser and navigate to `http://localhost:8501`.
 ## 📖 Documentation Reference
 
 - **[PROJECT_SPEC.md](docs/PROJECT_SPEC.md)**: Full system specification, interface contracts, and milestone roadmap.
+- **[REPORT_GENERATION_METHODS.md](docs/REPORT_GENERATION_METHODS.md)**: Report templates, evidence manifest provenance, econometric interpretation rules, and reproducibility protocols.
+- **[REPORTING_PIPELINE.md](docs/REPORTING_PIPELINE.md)**: Reporting system architecture, source resolution, tri-state readiness, and export pipeline.
 - **[DATASET_CATALOG.md](docs/DATASET_CATALOG.md)**: Verified CSV schemas, exact predictor counts, target definitions, and empirical audit notes.
 - **[DATA_PIPELINE.md](docs/DATA_PIPELINE.md)**: Data Engine technical architecture, Mermaid flowcharts, and splitting algorithms.
 - **[EDA_METHODS.md](docs/EDA_METHODS.md)**: Univariate distributions, skewness, kurtosis, Pearson vs Spearman, and relationship diagnostics.
