@@ -60,18 +60,26 @@ st.divider()
 # -----------------------------------------------------------------------------
 # SESSION STATE & PREREQUISITE VALIDATION
 # -----------------------------------------------------------------------------
-split_res: Optional[SplitResult] = st.session_state.get("dataset_split_result", None)
+split_res: Optional[SplitResult] = st.session_state.get("active_split_result") or st.session_state.get("dataset_split_result", None)
 current_meta: Optional[DatasetMetadata] = st.session_state.get("active_dataset_metadata", None)
-tracker: RegressionExperimentTracker = st.session_state.get("regression_tracker", RegressionExperimentTracker())
+tracker: RegressionExperimentTracker = (
+    st.session_state.get("regression_tracker")
+    or st.session_state.get("regression_experiment_tracker")
+    or RegressionExperimentTracker()
+)
+st.session_state["regression_tracker"] = tracker
+st.session_state["regression_experiment_tracker"] = tracker
 
 if split_res is None or current_meta is None:
     st.warning("⚠️ **Dataset & Partition Required**: Please select a dataset in the **Dataset Library** and create a split.")
     st.stop()
 
+active_ds_fp = st.session_state.get("active_dataset_fingerprint") or getattr(current_meta, "dataset_fingerprint", None) or getattr(current_meta, "sha256_checksum", None)
+
 # Retrieve available models for active split
 available_models = tracker.get_valid_models(
     current_split_fingerprint=split_res.split_fingerprint,
-    current_dataset_fingerprint=current_meta.dataset_fingerprint
+    current_dataset_fingerprint=active_ds_fp
 )
 
 if not available_models:

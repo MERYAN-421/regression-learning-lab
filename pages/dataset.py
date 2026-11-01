@@ -75,12 +75,16 @@ with col_sel:
         # Clear stale split and future downstream models
         if "active_split_result" in st.session_state:
             del st.session_state["active_split_result"]
+        if "dataset_split_result" in st.session_state:
+            del st.session_state["dataset_split_result"]
         if "active_split_config" in st.session_state:
             del st.session_state["active_split_config"]
         if "active_split_dataset_id" in st.session_state:
             del st.session_state["active_split_dataset_id"]
         if "trained_model" in st.session_state:
             del st.session_state["trained_model"]
+        if "active_ols_model" in st.session_state:
+            del st.session_state["active_ols_model"]
         st.rerun()
 
 current_meta: DatasetMetadata = registry.get_dataset(st.session_state["selected_dataset_id"])
@@ -141,6 +145,8 @@ def _load_cached_bundle(ds_id: str, file_fingerprint: str):
 with st.spinner("Loading and profiling dataset..."):
     bundle, validation_report = _load_cached_bundle(current_meta.id, current_fingerprint)
     st.session_state["active_dataset_bundle"] = bundle
+    st.session_state["active_dataset_metadata"] = current_meta
+    st.session_state["active_dataset_fingerprint"] = current_fingerprint
 
 # Check schema validation: Distinguish blocking errors from warnings
 if validation_report.has_blocking_errors:
@@ -427,6 +433,7 @@ if execute_split and can_execute_split:
             )
             st.session_state["active_split_config"] = split_config
             st.session_state["active_split_result"] = split_res
+            st.session_state["dataset_split_result"] = split_res
             st.session_state["active_split_dataset_id"] = current_meta.id
             st.success(f"✅ Successfully partitioned dataset using {chosen_strategy.value.capitalize()} Split!")
     except Exception as e:

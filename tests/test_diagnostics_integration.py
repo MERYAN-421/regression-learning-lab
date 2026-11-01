@@ -243,7 +243,7 @@ def test_diagnostic_suite_json_export_preserves_numeric_details(integration_spli
 
 def test_apptest_diagnostics_page_renders():
     """Verify that pages/diagnostics.py renders cleanly without uncaught exceptions via Streamlit AppTest."""
-    at = AppTest.from_file("pages/diagnostics.py")
+    at = AppTest.from_file(str(PROJECT_ROOT / "pages" / "diagnostics.py"), default_timeout=30)
     at.run()
     assert not at.exception, f"AppTest raised exception on diagnostics page: {at.exception}"
 

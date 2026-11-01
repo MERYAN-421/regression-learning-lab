@@ -9,6 +9,7 @@ Tests:
 - Report Experiment Tracker history and immutability
 """
 import pytest
+from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 

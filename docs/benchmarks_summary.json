@@ -1,0 +1,125 @@
+{
+  "student_performance": {
+    "dataset": "Student Performance",
+    "rows": 395,
+    "dataset_fingerprint": "56993_e47f9ee225e1ee6e",
+    "split_fingerprint": "ad6c1cc7ca9adeef",
+    "selected_features": [
+      "Medu",
+      "Fedu",
+      "failures",
+      "G1",
+      "G2"
+    ],
+    "m1_id": "ols_13ca795b2942",
+    "m1_val_rmse": 2.213479126153539,
+    "m1_val_r2": 0.8096823694990226,
+    "m2_id": "ols_eaa5c00dc54e",
+    "m2_val_rmse": 2.2817794751836016,
+    "m2_val_r2": 0.797756068550695,
+    "candidate_id": "ols_eaa5c00dc54e",
+    "diag_suite_id": "suite_ols_eaa5c00dc54e_398ca799f288",
+    "report_id": "rep_blocked_008aead2",
+    "zip_size_bytes": 6820,
+    "timings_sec": {
+      "dataset_load": 0.064,
+      "split": 0.019,
+      "feature_selection": 1.493,
+      "ols_fit_m1": 0.293,
+      "ols_fit_m2": 0.059,
+      "diagnostics": 0.017,
+      "comparison": 0.01,
+      "report_and_exports": 1.388,
+      "total_workflow": 3.373
+    },
+    "peak_memory_mb": 22.82
+  },
+  "appliances_energy": {
+    "dataset": "Appliances Energy Prediction",
+    "rows": 19735,
+    "dataset_fingerprint": "11979363_2820bf712ad0275c",
+    "split_fingerprint": "11f581f9d98e2b82",
+    "selected_features": [
+      "lights",
+      "T1",
+      "RH_1",
+      "T2",
+      "T3",
+      "T6",
+      "RH_6",
+      "RH_8",
+      "T_out",
+      "RH_out"
+    ],
+    "model_id": "ols_00f6ead11743",
+    "val_rmse": 89.78317043655726,
+    "val_r2": 0.05254243073329723,
+    "diag_suite_id": "suite_ols_00f6ead11743_60f13e827c97",
+    "dw_status": "executed",
+    "report_id": "rep_0ae3e3ae0f64",
+    "zip_size_bytes": 19059,
+    "timings_sec": {
+      "dataset_load": 0.205,
+      "split": 0.124,
+      "feature_selection": 0.689,
+      "ols_fit": 0.075,
+      "diagnostics": 0.199,
+      "report_and_exports": 4.046,
+      "total_workflow": 5.341
+    },
+    "peak_memory_mb": 32.47
+  },
+  "kc_house_sales": {
+    "dataset": "King County House Sales",
+    "rows": 21613,
+    "dataset_fingerprint": "2359557_fb9ce109d108656e",
+    "split_fingerprint": "4d10d191107c478c",
+    "m1_id": "ols_9269cdbe1ae3",
+    "m1_val_rmse": 189229.77712704378,
+    "m2_id": "ols_9c7efc460f41",
+    "m2_val_rmse": 235840.88477263422,
+    "candidate_id": "ols_9c7efc460f41",
+    "pareto_models": [
+      "ols_9269cdbe1ae3",
+      "ols_9c7efc460f41"
+    ],
+    "diag_suite_id": "suite_ols_9c7efc460f41_b24d221e045c",
+    "report_id": "rep_blocked_6a1620ce",
+    "zip_size_bytes": 6857,
+    "timings_sec": {
+      "dataset_load": 0.092,
+      "split": 0.072,
+      "ols_fit_m1": 0.112,
+      "feature_selection": 0.579,
+      "ols_fit_m2": 0.064,
+      "diagnostics": 0.118,
+      "comparison": 0.006,
+      "report_and_exports": 0.002,
+      "total_workflow": 1.047
+    },
+    "peak_memory_mb": 30.34
+  },
+  "life_expectancy": {
+    "dataset": "Life Expectancy (WHO)",
+    "rows": 2938,
+    "group_column": "Country",
+    "dataset_fingerprint": "333442_872125dd1dd0f914",
+    "split_fingerprint": "dc070a746ffedb12",
+    "model_id": "ols_6c43facda1c3",
+    "val_rmse": 3.582227653780887,
+    "val_r2": 0.8363214320390122,
+    "diag_suite_id": "suite_ols_6c43facda1c3_80239dd28409",
+    "dw_status": "not_applicable",
+    "report_id": "rep_d06b29d575d6",
+    "zip_size_bytes": 18809,
+    "timings_sec": {
+      "dataset_load": 0.019,
+      "split": 0.068,
+      "ols_fit": 0.166,
+      "diagnostics": 0.061,
+      "report_and_exports": 1.255,
+      "total_workflow": 1.571
+    },
+    "peak_memory_mb": 4.24
+  }
+}

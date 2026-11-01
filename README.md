@@ -3,10 +3,12 @@
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-FF4B4B.svg?style=flat&logo=Streamlit&logoColor=white)](https://streamlit.io/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Milestone-6%20Completed-success.svg)]()
+[![Status](https://img.shields.io/badge/Release-v1.0.0%20Candidate-success.svg)]()
+[![Deployment](https://img.shields.io/badge/Deployment-Prepared%20(Pending%20Owner)-orange.svg)](docs/DEPLOYMENT_GUIDE.md)
 
 > **Interactive Multiple Linear Regression & Statistical Diagnostics Platform**  
-> An educational web platform designed for data science and statistics students to explore real-world regression modeling, feature selection, and the classical Gauss-Markov assumptions using curated Kaggle tabular datasets (14–39 features).
+> An educational web platform designed for data science and statistics students to explore real-world regression modeling, feature selection, and the classical Gauss-Markov assumptions using curated Kaggle tabular datasets (14–39 features).  
+> **Deployment Status**: Production Prepared — Live Verification Pending Owner Authorization. See [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) for step-by-step Streamlit Community Cloud launch instructions.
 
 ---
 
@@ -179,24 +181,30 @@ conda activate regression-lab
 pip install -r requirements.txt
 ```
 
-### 3. Acquire Datasets (Optional for Unit Tests, Required for Real Modeling)
+### 3. Acquire Datasets (Automated Fallback & Pre-Provisioning)
 The platform includes an automated downloader that retrieves and cryptographically verifies the four benchmark datasets into `data/raw/`:
 ```bash
-python -m src.data.download
+python scripts/download_datasets.py
 ```
-*(Alternatively, missing datasets can be downloaded on-demand directly in the UI via `pages/dataset.py`)*
+*(Alternatively, missing datasets are acquired on-demand and verified via SHA-256 directly in the UI via `src/data/loader.py`)*
 
-### 4. Run Automated Test Suite (264 Tests Passing)
-The test suite covers unit, regression, diagnostic, comparison, reporting, and AppTest integration:
+### 4. Run Automated Test Suite (306 Tests Passing)
+The test suite covers unit, regression, diagnostic, comparison, reporting, session isolation, and AppTest integration:
 
 - **Comprehensive Test Execution**:
   ```bash
-  pytest -v
+  pytest -q
+  ```
+  *(Output: `306 passed in ~82s`)*
+
+- **Milestone 7 Production Readiness Tests**:
+  ```bash
+  pytest tests/test_milestone_7_production.py -v
   ```
 
-- **Reporting Engine Tests Only**:
+- **Run Empirical Benchmarks Across All 4 Datasets**:
   ```bash
-  pytest -k reporting -v
+  python scripts/run_benchmarks.py
   ```
 
 ### 5. Launch the Streamlit Platform
@@ -218,12 +226,21 @@ Open your browser and navigate to `http://localhost:8501`.
 | **4** | **Assumption Diagnostics** | Five Gauss-Markov diagnostic tests, residual plots, Cook's distance, leverage | ✅ **Completed** |
 | **5** | **Experiment & Model Comparison** | Validation-based leaderboard, radar charts, Pareto complexity frontier, diagnostic matrix, feature overlap, candidate selection | ✅ **Completed** |
 | **6** | **Academic Report Laboratory** | Auditable evidence manifest, 3 report templates, Markdown/HTML/JSON/ZIP exports, Python reproduction scripts | ✅ **Completed** |
-| **7** | **Deployment & Final Verification** | Cloud deployment verification, end-to-end integration audit, and final platform release | ⏳ Scheduled |
+| **7** | **Deployment & Final Verification** | Cloud deployment verification, multi-user session isolation, security hardening, automated CI, benchmarks, and release v1.0.0 candidate | ✅ **Completed** (Deployment Prepared) |
 
 ---
 
 ## 📖 Documentation Reference
 
+### Milestone 7 Production & Deployment
+- **[DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)**: Exact owner-facing Streamlit Community Cloud deployment instructions and configuration.
+- **[PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md)**: Assessment against all 8 Critical Acceptance Gates.
+- **[FINAL_VALIDATION_REPORT.md](docs/FINAL_VALIDATION_REPORT.md)**: Comprehensive cross-milestone audit, test execution summary (306/306 passing), and verification level classifications.
+- **[USER_GUIDE.md](docs/USER_GUIDE.md)**: End-to-end Student Performance walkthrough across all 9 pages with econometric interpretation notes.
+- **[PERFORMANCE_REPORT.md](docs/PERFORMANCE_REPORT.md)**: Empirical timings, memory consumption benchmarks across all 4 datasets.
+- **[SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md)**: Hardening evaluation, CORS/XSRF protection, secrets exclusion, and multi-user session state isolation.
+
+### Technical & Statistical Foundations
 - **[PROJECT_SPEC.md](docs/PROJECT_SPEC.md)**: Full system specification, interface contracts, and milestone roadmap.
 - **[REPORT_GENERATION_METHODS.md](docs/REPORT_GENERATION_METHODS.md)**: Report templates, evidence manifest provenance, econometric interpretation rules, and reproducibility protocols.
 - **[REPORTING_PIPELINE.md](docs/REPORTING_PIPELINE.md)**: Reporting system architecture, source resolution, tri-state readiness, and export pipeline.

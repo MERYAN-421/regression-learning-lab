@@ -44,12 +44,19 @@ if split_res is None or current_meta is None:
 
 # Initialize or retrieve regression tracker
 if "regression_experiment_tracker" not in st.session_state:
-    st.session_state["regression_experiment_tracker"] = RegressionExperimentTracker()
+    st.session_state["regression_experiment_tracker"] = st.session_state.get(
+        "regression_tracker", RegressionExperimentTracker()
+    )
+st.session_state["regression_tracker"] = st.session_state["regression_experiment_tracker"]
 tracker: RegressionExperimentTracker = st.session_state["regression_experiment_tracker"]
 
 # Retrieve feature selection tracker
-fs_tracker: FeatureSelectionExperimentTracker = st.session_state.get(
-    "fs_experiment_tracker", FeatureSelectionExperimentTracker()
+fs_tracker: FeatureSelectionExperimentTracker = (
+    st.session_state.get("fs_experiment_tracker")
+    or st.session_state.get("fs_tracker")
+    or st.session_state.get("experiment_tracker")
+    or st.session_state.get("feature_selection_tracker")
+    or FeatureSelectionExperimentTracker()
 )
 
 # -----------------------------------------------------------------------------

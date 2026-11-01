@@ -59,11 +59,15 @@ st.divider()
 # -----------------------------------------------------------------------------
 # SESSION STATE & TRACKERS INITIALIZATION
 # -----------------------------------------------------------------------------
-split_res: Optional[SplitResult] = st.session_state.get("dataset_split_result", None)
+split_res: Optional[SplitResult] = st.session_state.get("active_split_result") or st.session_state.get("dataset_split_result", None)
 current_meta: Optional[DatasetMetadata] = st.session_state.get("active_dataset_metadata", None)
-regression_tracker: RegressionExperimentTracker = st.session_state.get(
-    "regression_tracker", RegressionExperimentTracker()
+regression_tracker: RegressionExperimentTracker = (
+    st.session_state.get("regression_tracker")
+    or st.session_state.get("regression_experiment_tracker")
+    or RegressionExperimentTracker()
 )
+st.session_state["regression_tracker"] = regression_tracker
+st.session_state["regression_experiment_tracker"] = regression_tracker
 if "comparison_tracker" not in st.session_state:
     st.session_state["comparison_tracker"] = ComparisonExperimentTracker()
 comparison_tracker: ComparisonExperimentTracker = st.session_state["comparison_tracker"]

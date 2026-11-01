@@ -4,7 +4,7 @@ Extracts, verifies, and indexes every quantitative claim, metric, and diagnostic
 against underlying experimental artifacts, ensuring 100% auditable provenance.
 """
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
@@ -17,7 +17,7 @@ from src.reporting.result_models import (
 from src.reporting.source_resolver import ResolvedReportSources
 
 
-def safe_get_field(obj: Any, field_path: str) -> Tuple_Result:
+def safe_get_field(obj: Any, field_path: str) -> Tuple[bool, Any]:
     """
     Safely retrieves a nested attribute or dictionary value without dynamic eval().
     Returns (found: bool, value: Any).

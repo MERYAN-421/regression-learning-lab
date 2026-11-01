@@ -42,7 +42,10 @@ if split_res is None or current_meta is None:
 
 # Retrieve or create regression experiment tracker
 if "regression_experiment_tracker" not in st.session_state:
-    st.session_state["regression_experiment_tracker"] = RegressionExperimentTracker()
+    st.session_state["regression_experiment_tracker"] = st.session_state.get(
+        "regression_tracker", RegressionExperimentTracker()
+    )
+st.session_state["regression_tracker"] = st.session_state["regression_experiment_tracker"]
 tracker: RegressionExperimentTracker = st.session_state["regression_experiment_tracker"]
 
 # Get all valid models matching active split

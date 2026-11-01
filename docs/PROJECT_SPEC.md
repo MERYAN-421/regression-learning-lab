@@ -107,7 +107,7 @@ Regression Learning Lab (app.py)
 | **Milestone 4** | **Assumption Diagnostics** | Five Gauss-Markov diagnostic tests and visual plots, Cook's distance, leverage diagnostics, dataset applicability safeguards | ✅ **Completed** |
 | **Milestone 5** | **Experiment & Model Comparison** | Validation-based multi-model leaderboard, multi-metric radar charts, Pareto complexity-error frontier, side-by-side diagnostic matrix without scoring, feature overlap & Jaccard similarity, candidate model selection audit trail | ✅ **Completed** |
 | **Milestone 6** | **Academic Report Laboratory** | Auditable evidence manifest, 3 report templates, Markdown/HTML/JSON/ZIP exports, Python reproduction scripts | ✅ **Completed** |
-| **Milestone 7** | **Deployment & Final Verification** | Cloud deployment verification, end-to-end integration audit, and final platform release | ⏳ Scheduled |
+| **Milestone 7** | **Deployment & Final Verification** | Cloud deployment verification, multi-user session isolation, security hardening, automated CI, benchmarks, and release v1.0.0 candidate | ✅ **Completed** (Deployment Prepared) |
 
 ---
 

@@ -93,9 +93,14 @@ has_split = (
 )
 
 # Initialize Experiment Tracker in Session State
-if "experiment_tracker" not in st.session_state:
-    st.session_state["experiment_tracker"] = FeatureSelectionExperimentTracker()
-tracker: FeatureSelectionExperimentTracker = st.session_state["experiment_tracker"]
+if "fs_experiment_tracker" not in st.session_state:
+    st.session_state["fs_experiment_tracker"] = st.session_state.get(
+        "experiment_tracker", FeatureSelectionExperimentTracker()
+    )
+st.session_state["experiment_tracker"] = st.session_state["fs_experiment_tracker"]
+st.session_state["fs_tracker"] = st.session_state["fs_experiment_tracker"]
+st.session_state["feature_selection_tracker"] = st.session_state["fs_experiment_tracker"]
+tracker: FeatureSelectionExperimentTracker = st.session_state["fs_experiment_tracker"]
 
 # Invalidate stale experiments if dataset changed
 if has_split:

@@ -59,6 +59,13 @@ def load_raw_dataset(metadata: DatasetMetadata) -> pd.DataFrame:
     """
     file_path = resolve_dataset_path(metadata)
     if not file_path.exists():
+        try:
+            from src.data.download import download_dataset
+            download_dataset(metadata.id, force=False)
+        except Exception:
+            pass
+
+    if not file_path.exists():
         raise DatasetNotFoundError(
             f"Dataset '{metadata.name}' (ID: {metadata.id}) not found at '{metadata.local_path}'.\n"
             f"Acquisition instruction: Download from {metadata.kaggle_url} and place in 'data/raw/'."
