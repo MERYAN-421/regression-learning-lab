@@ -26,16 +26,18 @@ class CanonicalLeaderboardRow:
     model_id: str
     model_name: str
     feature_source: str
-    original_features_k: int
+    original_features_k: Optional[int]
     parameter_count: int
     val_rmse: float
+    val_r2: float
     train_rmse: Optional[float] = None
     generalization_gap: Optional[float] = None
-    val_r2: float = 0.0
     train_r2: Optional[float] = None
     train_adj_r2: Optional[float] = None
     val_mae: Optional[float] = None
     train_mae: Optional[float] = None
+    aic: Optional[float] = None
+    bic: Optional[float] = None
     is_pareto: bool = False
     is_valid_for_inference: bool = True
     diagnostic_suite_id: Optional[str] = None
@@ -51,7 +53,8 @@ def adapt_leaderboard_row(
     Accepts both Milestone 5 display-oriented keys and canonical snake_case keys.
 
     Raises:
-        ValueError: If mandatory model_id, val_rmse, or val_r2 cannot be resolved.
+        ValueError: If mandatory model_id, val_rmse, val_r2, or parameter_count cannot be resolved,
+                    or if original_features_k / gen_gap contains malformed non-numeric values.
                     Never substitutes default zeros for missing experimental statistics.
     """
     if not isinstance(row, dict):
@@ -65,7 +68,7 @@ def adapt_leaderboard_row(
 
     # 2. Validation RMSE (Mandatory numeric)
     raw_val_rmse = row.get("Val RMSE") if "Val RMSE" in row else row.get("val_rmse")
-    if raw_val_rmse is None or str(raw_val_rmse).strip() in ("", "N/A", "None"):
+    if raw_val_rmse is None or str(raw_val_rmse).strip() in ("", "N/A", "None", "Missing", "Unavailable"):
         raise ValueError(f"Model '{m_id}' is missing mandatory Validation RMSE. Cannot fabricate zero.")
     try:
         val_rmse = float(raw_val_rmse)
@@ -74,20 +77,43 @@ def adapt_leaderboard_row(
 
     # 3. Validation R² (Mandatory numeric)
     raw_val_r2 = row.get("Val R²") if "Val R²" in row else (row.get("Val R2") if "Val R2" in row else row.get("val_r2"))
-    if raw_val_r2 is None or str(raw_val_r2).strip() in ("", "N/A", "None"):
+    if raw_val_r2 is None or str(raw_val_r2).strip() in ("", "N/A", "None", "Missing", "Unavailable"):
         raise ValueError(f"Model '{m_id}' is missing mandatory Validation R². Cannot fabricate zero.")
     try:
         val_r2 = float(raw_val_r2)
     except (TypeError, ValueError) as err:
         raise ValueError(f"Model '{m_id}' has non-numeric Validation R² '{raw_val_r2}'.") from err
 
-    # 4. Parameters (p)
-    raw_p = row.get("Parameters (p)") if "Parameters (p)" in row else (row.get("parameter_count") if "parameter_count" in row else row.get("parameters"))
-    p_count = int(raw_p) if raw_p is not None and str(raw_p).isdigit() else (int(raw_p) if isinstance(raw_p, (int, float)) else 0)
+    # 4. Parameters (p) (Mandatory positive integer)
+    raw_p = row.get("Parameters (p)") if "Parameters (p)" in row else (
+        row.get("parameter_count") if "parameter_count" in row else (
+            row.get("parameters") if "parameters" in row else row.get("p")
+        )
+    )
+    if raw_p is None or str(raw_p).strip() in ("", "N/A", "None", "Missing", "Unavailable"):
+        raise ValueError(f"Model '{m_id}' is missing mandatory parameter count (p). Cannot fabricate zero.")
+    try:
+        p_count = int(raw_p)
+    except (TypeError, ValueError) as err:
+        raise ValueError(f"Model '{m_id}' has non-numeric or invalid parameter count '{raw_p}'.") from err
+    if p_count <= 0:
+        raise ValueError(f"Model '{m_id}' has non-positive parameter count {p_count}. Cannot fabricate zero.")
 
-    # 5. Original Features (K)
-    raw_k = row.get("Original Features (K)") if "Original Features (K)" in row else (row.get("original_feature_count") if "original_feature_count" in row else row.get("original_k"))
-    k_count = int(raw_k) if raw_k is not None and str(raw_k).isdigit() else (int(raw_k) if isinstance(raw_k, (int, float)) else 0)
+    # 5. Original Features (K) (Optional non-negative integer, explicit None if unavailable)
+    raw_k = row.get("Original Features (K)") if "Original Features (K)" in row else (
+        row.get("original_feature_count") if "original_feature_count" in row else (
+            row.get("original_k") if "original_k" in row else row.get("k")
+        )
+    )
+    if raw_k is None or str(raw_k).strip() in ("", "N/A", "None", "Missing", "Unavailable"):
+        k_count = None  # Explicit Missing/Unavailable state, never default to 0!
+    else:
+        try:
+            k_count = int(raw_k)
+        except (TypeError, ValueError) as err:
+            raise ValueError(f"Model '{m_id}' has non-numeric or invalid original feature count '{raw_k}'.") from err
+        if k_count < 0:
+            raise ValueError(f"Model '{m_id}' has negative original feature count {k_count}.")
 
     # 6. Rank
     raw_rank = row.get("Rank") if "Rank" in row else row.get("rank", 1)
@@ -104,22 +130,27 @@ def adapt_leaderboard_row(
 
     # 9. Train RMSE & Generalization Gap
     raw_tr_rmse = row.get("Train RMSE") if "Train RMSE" in row else row.get("train_rmse")
-    train_rmse = float(raw_tr_rmse) if raw_tr_rmse is not None and str(raw_tr_rmse) not in ("", "N/A", "None") else None
+    train_rmse = float(raw_tr_rmse) if raw_tr_rmse is not None and str(raw_tr_rmse).strip() not in ("", "N/A", "None", "Missing", "Unavailable") else None
 
-    raw_gen_gap = row.get("Gen. Gap") if "Gen. Gap" in row else row.get("generalization_gap")
-    if raw_gen_gap is not None and str(raw_gen_gap) not in ("", "N/A", "None"):
-        gen_gap = float(raw_gen_gap)
+    raw_gen_gap = row.get("Gen. Gap") if "Gen. Gap" in row else (
+        row.get("generalization_gap") if "generalization_gap" in row else row.get("gen_gap")
+    )
+    if raw_gen_gap is not None and str(raw_gen_gap).strip() not in ("", "N/A", "None", "Missing", "Unavailable"):
+        try:
+            gen_gap = float(raw_gen_gap)
+        except (TypeError, ValueError) as err:
+            raise ValueError(f"Model '{m_id}' has non-numeric generalization gap '{raw_gen_gap}'.") from err
     elif train_rmse is not None:
-        gen_gap = val_rmse - train_rmse
+        gen_gap = float(val_rmse - train_rmse)
     else:
-        gen_gap = None
+        gen_gap = None  # Explicit Unavailable state! Never default to 0.0!
 
     # 10. Train R² & Train Adj R²
     raw_tr_r2 = row.get("Train R²") if "Train R²" in row else (row.get("Train R2") if "Train R2" in row else row.get("train_r2"))
-    train_r2 = float(raw_tr_r2) if raw_tr_r2 is not None and str(raw_tr_r2) not in ("", "N/A", "None") else None
+    train_r2 = float(raw_tr_r2) if raw_tr_r2 is not None and str(raw_tr_r2).strip() not in ("", "N/A", "None", "Missing", "Unavailable") else None
 
     raw_adj_r2 = row.get("Train Adj R²") if "Train Adj R²" in row else row.get("train_adj_r2")
-    train_adj_r2 = float(raw_adj_r2) if raw_adj_r2 is not None and str(raw_adj_r2) not in ("", "N/A", "None") else None
+    train_adj_r2 = float(raw_adj_r2) if raw_adj_r2 is not None and str(raw_adj_r2).strip() not in ("", "N/A", "None", "Missing", "Unavailable") else None
 
     # 11. Val & Train MAE
     raw_v_mae = row.get("Val MAE") if "Val MAE" in row else row.get("val_mae")
@@ -154,7 +185,14 @@ def adapt_leaderboard_row(
     if diag_id and str(diag_id).strip() in ("", "Not Run", "None"):
         diag_id = None
 
-    # 15. Test Status (strictly non-ranking flag)
+    # 15. AIC and BIC
+    raw_aic = row.get("AIC") if "AIC" in row else row.get("aic")
+    aic = float(raw_aic) if raw_aic is not None and str(raw_aic).strip() not in ("", "N/A", "None", "Missing", "Unavailable") else None
+
+    raw_bic = row.get("BIC") if "BIC" in row else row.get("bic")
+    bic = float(raw_bic) if raw_bic is not None and str(raw_bic).strip() not in ("", "N/A", "None", "Missing", "Unavailable") else None
+
+    # 16. Test Status (strictly non-ranking flag)
     test_status = row.get("Test Status") or row.get("test_evaluation_status") or "untested"
 
     return CanonicalLeaderboardRow(
@@ -172,6 +210,8 @@ def adapt_leaderboard_row(
         train_adj_r2=train_adj_r2,
         val_mae=val_mae,
         train_mae=train_mae,
+        aic=aic,
+        bic=bic,
         is_pareto=is_pareto,
         is_valid_for_inference=is_inf,
         diagnostic_suite_id=str(diag_id) if diag_id else None,

@@ -36,23 +36,32 @@ def generate_reproduction_script(
             "raise RuntimeError('Reproducibility Incomplete: Required configuration artifacts missing.')\n"
         )
 
+    # Recover exact original SplitConfig
+    split_cfg_obj = getattr(split, "config", None)
+    if split_cfg_obj is None:
+        return (
+            "# REPRODUCIBILITY STATUS: INCOMPLETE\n"
+            "# STRICT TEST ISOLATION: Locked Test Set evaluation is excluded from development replay.\n"
+            "# Cannot generate complete reproduction script: Missing exact original SplitConfig artifact.\n"
+            "# The split configuration ratios and parameters cannot be guessed or reconstructed from actual partition proportions.\n\n"
+            "raise RuntimeError('Reproducibility Incomplete: Exact SplitConfig artifact unavailable.')\n"
+        )
+
+    strat_val = split_cfg_obj.strategy
+    split_strategy = strat_val.value if hasattr(strat_val, "value") else str(strat_val)
+    strat_enum_name = strat_val.name if hasattr(strat_val, "name") else str(strat_val).upper()
+    train_ratio = split_cfg_obj.train_ratio
+    val_ratio = split_cfg_obj.val_ratio
+    test_ratio = split_cfg_obj.test_ratio
+    random_seed = split_cfg_obj.random_seed
+    date_col = split_cfg_obj.date_column or (meta.date_column if meta else None)
+    group_col = split_cfg_obj.group_column or (meta.group_column if meta else None)
+
     ds_id = model.dataset_id
     features_repr = repr(model.selected_original_features)
     fit_intercept = model.fit_intercept
     scale_numeric = model.scale_numeric
     allow_rank_def = not model.is_valid_for_inference
-
-    # Determine split configuration
-    strat_val = getattr(split, "strategy", "random")
-    split_strategy = strat_val.value if hasattr(strat_val, "value") else str(strat_val)
-    random_seed = split.random_seed if getattr(split, "random_seed", None) is not None else 42
-
-    proportions = getattr(split, "actual_proportions", {})
-    raw_tr = proportions.get("train", 0.70)
-    raw_val = proportions.get("val", 0.15)
-    train_ratio = round(raw_tr, 2)
-    val_ratio = round(raw_val, 2)
-    test_ratio = round(1.0 - train_ratio - val_ratio, 2)
 
     exp_train_rmse = model.train_metrics.rmse
     exp_val_rmse = model.val_metrics.rmse
@@ -133,15 +142,15 @@ def run_reproduction():
         "temporal": SplitStrategy.TEMPORAL,
         "group": SplitStrategy.GROUP
     }}
-    strat = strat_map.get("{split_strategy}", SplitStrategy.RANDOM)
+    strat = strat_map.get("{split_strategy}", SplitStrategy.{strat_enum_name})
     split_cfg = SplitConfig(
         strategy=strat,
         train_ratio={train_ratio},
         val_ratio={val_ratio},
         test_ratio={test_ratio},
-        random_seed={random_seed},
-        date_column=meta.date_column if strat == SplitStrategy.TEMPORAL else None,
-        group_column=meta.group_column if strat == SplitStrategy.GROUP else None
+        random_seed={repr(random_seed)},
+        date_column={repr(date_col)},
+        group_column={repr(group_col)}
     )
 
     split_res = split_dataset(

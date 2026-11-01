@@ -106,6 +106,7 @@ class SplitResult:
     timestamps_test: Optional[pd.Series] = None
     split_fingerprint: str = ""
     warnings: List[str] = field(default_factory=list)
+    config: Optional[SplitConfig] = None
 
 
 @dataclass

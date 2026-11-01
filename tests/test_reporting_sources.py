@@ -290,6 +290,84 @@ class TestReportSourceResolution:
             adapt_leaderboard_row(incomplete_row)
         assert "missing mandatory Validation RMSE" in str(excinfo.value)
 
+    def test_missing_or_malformed_parameter_count_raises_error(self):
+        # 1. Missing parameter count completely
+        missing_p_row = {
+            "Model ID": "m1",
+            "Val RMSE": 1.25,
+            "Val R²": 0.80
+            # Parameters (p) missing
+        }
+        with pytest.raises(ValueError) as exc:
+            adapt_leaderboard_row(missing_p_row)
+        assert "missing mandatory parameter count (p)" in str(exc.value)
+
+        # 2. Non-positive parameter count (p <= 0)
+        zero_p_row = {
+            "Model ID": "m1",
+            "Val RMSE": 1.25,
+            "Val R²": 0.80,
+            "Parameters (p)": 0
+        }
+        with pytest.raises(ValueError) as exc:
+            adapt_leaderboard_row(zero_p_row)
+        assert "non-positive parameter count" in str(exc.value)
+
+        # 3. Malformed string parameter count
+        string_p_row = {
+            "Model ID": "m1",
+            "Val RMSE": 1.25,
+            "Val R²": 0.80,
+            "Parameters (p)": "five_params"
+        }
+        with pytest.raises(ValueError) as exc:
+            adapt_leaderboard_row(string_p_row)
+        assert "non-numeric or invalid parameter count" in str(exc.value)
+
+    def test_malformed_original_feature_count_raises_error(self):
+        # Negative feature count
+        negative_k_row = {
+            "Model ID": "m1",
+            "Val RMSE": 1.25,
+            "Val R²": 0.80,
+            "Parameters (p)": 4,
+            "Original Features (K)": -2
+        }
+        with pytest.raises(ValueError) as exc:
+            adapt_leaderboard_row(negative_k_row)
+        assert "negative original feature count" in str(exc.value)
+
+        # Non-numeric string feature count
+        malformed_k_row = {
+            "Model ID": "m1",
+            "Val RMSE": 1.25,
+            "Val R²": 0.80,
+            "Parameters (p)": 4,
+            "Original Features (K)": "three_features"
+        }
+        with pytest.raises(ValueError) as exc:
+            adapt_leaderboard_row(malformed_k_row)
+        assert "non-numeric or invalid original feature count" in str(exc.value)
+
+    def test_optional_complexity_and_metrics_allow_explicit_none_without_fabrication(self):
+        row_with_unavailables = {
+            "Model ID": "m1",
+            "Val RMSE": 1.50,
+            "Val R²": 0.75,
+            "Parameters (p)": 3,
+            "Original Features (K)": "Unavailable",
+            "Train RMSE": "Missing",
+            "Gen. Gap": "N/A"
+        }
+        adapted = adapt_leaderboard_row(row_with_unavailables)
+        # Must be None, never fabricated zero!
+        assert adapted.original_features_k is None
+        assert adapted.train_rmse is None
+        assert adapted.generalization_gap is None
+        assert adapted.val_rmse == 1.50
+        assert adapted.val_r2 == 0.75
+        assert adapted.parameter_count == 3
+
     def test_explicit_diagnostic_suite_id_never_silently_replaced(self):
         reg_tracker = RegressionExperimentTracker()
         m1 = create_dummy_model("m1")

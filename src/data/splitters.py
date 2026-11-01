@@ -176,7 +176,8 @@ def split_dataset(
         timestamps_val=timestamps_val,
         timestamps_test=timestamps_test,
         split_fingerprint=split_fp,
-        warnings=warnings
+        warnings=warnings,
+        config=config
     )
 
 

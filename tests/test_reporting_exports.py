@@ -158,32 +158,24 @@ class TestExportIntegrityAndReproducibility:
             assert len(zf.read("manifest.json")) > 50
             assert len(zf.read("reproduce.py")) > 50
 
-    def test_end_to_end_execution_of_generated_reproduction_script(self, tmp_path):
-        """
-        Mandatory Task 2 verification:
-        Execute generated reproduce.py end-to-end via Python subprocess on a real dataset
-        and verify that training & validation metrics reproduce within numerical tolerance.
-        """
+    def _execute_subproc_reproduction(self, tmp_path, dataset_id, split_cfg, features):
         import subprocess
         import sys
         from src.data.registry import get_registry
         from src.data.loader import load_dataset_bundle, get_dataset_fingerprint
-        from src.data.models import SplitConfig, SplitStrategy
         from src.data.splitters import split_dataset
         from src.models.model_service import train_ols_experiment
 
         reg = get_registry()
-        meta = reg.get_dataset("student_performance")
+        meta = reg.get_dataset(dataset_id)
         raw_df, feat_df, target_ser, _ = load_dataset_bundle(meta)
         ds_fp = get_dataset_fingerprint(meta)
 
-        cfg = SplitConfig(strategy=SplitStrategy.RANDOM, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, random_seed=42)
-        split = split_dataset(feat_df, target_ser, meta, cfg, raw_df=raw_df)
+        split = split_dataset(feat_df, target_ser, meta, split_cfg, raw_df=raw_df)
 
-        feats = ["studytime", "failures", "absences"]
         model = train_ols_experiment(
             split_result=split,
-            feature_source=feats,
+            feature_source=features,
             dataset_id=meta.id,
             dataset_fingerprint=ds_fp,
             target_name=meta.target_column,
@@ -197,16 +189,14 @@ class TestExportIntegrityAndReproducibility:
         )
         report = run_academic_report(
             sources=sources,
-            report_title="Student Performance Empirical Replay"
+            report_title=f"{meta.name} Empirical Replay"
         )
         export_svc = ReportExportService(report=report, sources=sources)
         script_code = export_svc.export_reproduction_script()
 
-        # Write out reproduce.py to temporary directory
-        script_path = tmp_path / "reproduce.py"
+        script_path = tmp_path / f"reproduce_{dataset_id}.py"
         script_path.write_text(script_code, encoding="utf-8")
 
-        # Execute the generated script via Python subprocess
         proc = subprocess.run(
             [sys.executable, str(script_path)],
             cwd=str(PROJECT_ROOT),
@@ -214,12 +204,33 @@ class TestExportIntegrityAndReproducibility:
             stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
-            timeout=60
+            timeout=90
         )
-        print("reproduce.py stdout:\n", proc.stdout)
         if proc.returncode != 0:
-            print("reproduce.py stderr:\n", proc.stderr)
+            print(f"reproduce_{dataset_id}.py failed!\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
 
         assert proc.returncode == 0
         assert "REPRODUCTION SUCCESSFUL: All reported metrics match within numerical tolerance." in proc.stdout
         assert "Split partition integrity verified." in proc.stdout
+        return proc.stdout
+
+    def test_end_to_end_reproduction_random_split_student_performance(self, tmp_path):
+        """Random Split reproduction on student_performance."""
+        from src.data.models import SplitConfig, SplitStrategy
+        cfg = SplitConfig(strategy=SplitStrategy.RANDOM, train_ratio=0.70, val_ratio=0.15, test_ratio=0.15, random_seed=42)
+        stdout = self._execute_subproc_reproduction(tmp_path, "student_performance", cfg, ["studytime", "failures", "absences"])
+        assert "Partitioning dataset using recorded SplitConfig..." in stdout
+
+    def test_end_to_end_reproduction_temporal_split_appliances_energy(self, tmp_path):
+        """Temporal Split reproduction on appliances_energy."""
+        from src.data.models import SplitConfig, SplitStrategy
+        cfg = SplitConfig(strategy=SplitStrategy.TEMPORAL, train_ratio=0.70, val_ratio=0.15, test_ratio=0.15, date_column="date")
+        stdout = self._execute_subproc_reproduction(tmp_path, "appliances_energy", cfg, ["T1", "RH_1", "T2", "RH_2"])
+        assert "Split partition integrity verified." in stdout
+
+    def test_end_to_end_reproduction_group_split_life_expectancy(self, tmp_path):
+        """Group Split reproduction on life_expectancy."""
+        from src.data.models import SplitConfig, SplitStrategy
+        cfg = SplitConfig(strategy=SplitStrategy.GROUP, train_ratio=0.70, val_ratio=0.15, test_ratio=0.15, random_seed=42, group_column="Country")
+        stdout = self._execute_subproc_reproduction(tmp_path, "life_expectancy", cfg, ["Adult Mortality", "BMI", "Schooling"])
+        assert "Split partition integrity verified." in stdout
